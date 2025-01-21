@@ -9,7 +9,7 @@ import {
   TranscriptFragment,
   Message,
   ImageAttachment
-} from '../src/charmonator/v1/transcript.mjs';
+} from '../lib/transcript.mjs';
 
 import { fetchChatModel } from '../lib/core.mjs';
 

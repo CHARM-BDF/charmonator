@@ -82,7 +82,7 @@ async function main() {
     const app = express();
     app.use(cors());
     app.use(BASE_URL + '/', express.static('public'));
-    app.use(BASE_URL + '/src', express.static('src'));
+    app.use(BASE_URL + '/src', express.static('static/src'));
 
     // Allow large JSON bodies for images, docs, etc.
     app.use(express.json({ limit: '50mb' }));
