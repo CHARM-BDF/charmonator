@@ -1,0 +1,561 @@
+/* Filename: styles.css */
+
+/* General Styling */
+/* Reset margins, set font family, and background for the body */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  background-color: #f0f0f0;
+  /* Full viewport height */
+  height: 100vh;
+  /* Center the chat container */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Chat container styling */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  /* Responsive width */
+  width: 100%;
+  max-width: 1200px;
+  /* Full height */
+  height: 100vh;
+  background-color: #fff;
+  /* Box shadow for depth */
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Header and settings */
+/* Chat header styling */
+.chat-header {
+  position: relative; /* For positioning the settings button */
+  padding: 20px;
+  background-color: #fff;
+  /* Bottom border for separation */
+  border-bottom: 1px solid #eaeaea;
+  text-align: center;
+  flex-shrink: 0;  
+}
+
+/* Header title */
+.chat-header h1 {
+  margin: 0;
+  font-weight: 500;
+}
+
+/* Settings Button Styles */
+.settings-button {
+  position: absolute;
+  right: 20px; /* Position from right */
+  top: 50%; /* Center vertically */
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  color: #333;
+}
+
+.settings-button:hover {
+  color: #555;
+}
+
+/* Settings Menu Styles */
+.settings-menu {
+  position: absolute;
+  top: 60px; /* Position below the header */
+  right: 20px;
+  background-color: #fff;
+  /* Border and shadow for distinction */
+  border: 1px solid #eaeaea;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 200px;
+  padding: 15px;
+  z-index: 1000;
+}
+
+/* Hide settings menu by default */
+.settings-menu.hidden {
+  display: none;
+}
+
+/* Settings option styling */
+.settings-option {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+
+/* Label for settings */
+.settings-option label {
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+/* Select dropdown in settings */
+.settings-option select {
+  padding: 5px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* Transition for smooth dropdown visibility */
+.settings-menu {
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.settings-menu.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Chat area */
+/* Main chat area styling */
+.chat-main {
+  flex: 1; /* Expand to fill available space */
+  padding: 20px;
+  overflow-y: auto; /* Scroll if content overflows */
+  background-color: #f9f9f9;
+}
+
+/* Individual message styling */
+.message {
+  display: flex;
+  margin-bottom: 15px;
+  position: relative;
+}
+
+/* Show copy button on hover */
+.message:hover .copy-btn {
+  display: block;
+}
+
+/* User message bubble styling */
+.message.user .bubble {
+  margin-left: auto; /* Align to right */
+  background-color: #d0f0c0;
+  color: #000;
+  /* Rounded corners */
+  border-radius: 20px 20px 0 20px;
+  /* Shadow for depth */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+
+/* Assistant message bubble styling */
+.message.assistant .bubble {
+  margin-right: auto; /* Align to left */
+  background-color: #e5e5ea;
+  color: #000;
+  /* Rounded corners */
+  border-radius: 20px 20px 20px 0;
+  /* Shadow for depth */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+
+/* Message bubble content */
+.bubble {
+  max-width: 80%; /* Max width for readability */
+  padding: 15px;
+  line-height: 1.6;
+  position: relative;
+}
+
+/* Code block styling */
+pre {
+  background-color: #1e1e1e;
+  color: #d0f0c0;
+  padding: 15px;
+  border-left: 4px solid #d0f0c0;
+  border-radius: 8px;
+  font-family: 'Courier New', Courier, monospace;
+  position: relative;
+  overflow: auto;
+}
+
+/* Copy button styling */
+.copy-btn {
+  background-color: rgba(255, 255, 255, 0.7);
+  border: none;
+  border-radius: 4px;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  display: none; /* Hidden by default */
+  margin-left: 5px;
+}
+
+/* Container for copy buttons */
+.copy-btn-container {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+}
+
+/* Hover effect for copy button */
+.copy-btn:hover {
+  background-color: rgba(255, 255, 255, 1);
+}
+
+/* Chat footer */
+.chat-footer {
+  display: flex;
+  flex-direction: column; /* Stack elements */
+  padding: 15px;
+  border-top: 1px solid #eaeaea;
+  background-color: #fff;
+}
+
+/* Message Input */
+/* Container for input elements */
+.input-container {
+  display: flex;
+  flex-direction: row; /* Align horizontally */
+  align-items: center;
+  margin-bottom: 10px; /* Space below */
+}
+
+/* Message input field */
+#messageInput {
+  flex: 1; /* Expand to fill space */
+  padding: 10px 15px;
+  border: 1px solid #ccc;
+  border-radius: 30px;
+  font-size: 16px;
+  resize: none; /* Disable resize */
+  box-sizing: border-box;
+}
+
+/* Send button */
+#sendBtn {
+  margin-left: 10px; /* Space between input and button */
+  padding: 10px 20px;
+  background-color: #d0f0c0;
+  border: none;
+  border-radius: 30px;
+  color: #000;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+/* Hover effect for send button */
+#sendBtn:hover {
+  background-color: #b0e0a0;
+}
+
+/* Adjustments for smaller screens */
+@media (max-width: 600px) {
+  /* Stack input elements vertically */
+  .input-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Adjust send button */
+  #sendBtn {
+    margin-left: 0;
+    margin-top: 10px;
+  }
+
+  /* Reduce padding in chat area */
+  .chat-main {
+    padding: 10px;
+  }
+
+  /* Adjust header */
+  .chat-header {
+    padding: 10px;
+  }
+
+  /* Adjust bubble max width */
+  .bubble {
+    max-width: 100%;
+    font-size: 14px;
+  }
+
+  /* Adjust attachment item */
+  .attachment-item {
+    font-size: 12px;
+    padding: 5px;
+  }
+
+  /* Adjust settings button position */
+  .settings-button {
+    right: 10px;
+  }
+
+  /* Adjust settings menu position */
+  .settings-menu {
+    top: 50px;
+    right: 10px;
+  }
+}
+
+/* Drag-and-Drop File Attachment Styling */
+/* Drop area styling */
+.drop-area {
+  border: 2px dashed #d0f0c0;
+  border-radius: 20px;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+/* Drop area hover state */
+.drop-area.dragover {
+  background-color: #f0fff0;
+  border-color: #b0e0a0;
+}
+
+/* File Input Styling */
+/* Hide actual file input */
+#fileInput {
+  display: none;
+}
+
+/* Label styling for file input */
+#fileInputLabel {
+  display: inline-block;
+  padding: 10px 20px;
+  background-color: #d0f0c0;
+  border-radius: 30px;
+  color: #000;
+  font-size: 16px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+/* Attachments Container Styling */
+/* Container for attachments */
+.attachments-container {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  padding-top: 10px; /* Space above */
+  border-top: 1px solid #eaeaea; /* Separator */
+  margin-top: 10px; /* Space from inputs */
+}
+
+/* Individual Attachment Item */
+.attachment-item {
+  background-color: #e0e0e0;
+  border-radius: 15px;
+  padding: 5px 10px;
+  margin-right: 10px;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
+
+/* Attachment File Name */
+.attachment-name {
+  margin-right: 8px;
+  word-break: break-all; /* Prevent overflow */
+}
+
+/* Remove Attachment Button */
+.remove-attachment-btn {
+  background: none;
+  border: none;
+  color: #ff0000;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Hover Effect for Remove Button */
+.remove-attachment-btn:hover {
+  color: #cc0000;
+}
+
+/* Thinking Indicator */
+/* Container for thinking indicator */
+.thinking-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px 0;
+}
+
+/* Hidden class for elements */
+.hidden {
+  display: none;
+}
+
+/* Thinking message styling */
+.message.thinking .bubble {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+/* Dot flashing animation */
+.dot-flashing {
+  position: relative;
+  width: 60px;
+  height: 20px;
+}
+
+.dot-flashing::before,
+.dot-flashing::after,
+.dot-flashing div {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #999;
+  animation: dotFlashing 1s infinite linear alternate;
+}
+
+.dot-flashing div {
+  left: 22px;
+  animation-delay: 0.2s;
+}
+
+.dot-flashing::after {
+  left: 44px;
+  animation-delay: 0.4s;
+}
+
+/* Keyframes for dot flashing animation */
+@keyframes dotFlashing {
+  0% {
+    background-color: #d0f0c0;
+  }
+  50%,
+  100% {
+    background-color: #999;
+  }
+}
+
+/* Media Queries for Responsive Design */
+/* Adjustments for tablets and small desktops */
+@media (max-width: 768px) {
+  /* Reduce chat area padding */
+  .chat-main {
+    padding: 15px;
+  }
+
+  /* Adjust header padding */
+  .chat-header {
+    padding: 15px;
+  }
+
+  /* Adjust settings button */
+  .settings-button {
+    right: 15px;
+  }
+
+  /* Adjust settings menu */
+  .settings-menu {
+    top: 55px;
+    right: 15px;
+  }
+}
+
+
+/* Styling for Active Model Display */
+.active-model-display {
+  position: absolute;
+  right: 60px; /* Adjust to position next to the gear icon */
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  color: #333;
+  white-space: nowrap;
+}
+
+/* Adjustments for smaller screens */
+@media (max-width: 600px) {
+  .active-model-display {
+    right: 50px; /* Adjust spacing for smaller screens */
+    font-size: 14px;
+  }
+}
+
+
+
+
+/* Further adjustments for screens narrower than 400px */
+@media (max-width: 400px) {
+  /* Adjust drop area */
+  .drop-area {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  /* Adjust file input label */
+  #fileInputLabel {
+    padding: 8px 15px;
+    font-size: 14px;
+  }
+}
+
+
+
+
+/* Styling for settings and playground mode */
+
+/* Styles for the close button */
+.close-settings-btn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.close-settings-btn:hover {
+  color: #555;
+}
+
+/* Playground mode adjustments */
+.settings-menu.playground-mode {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  width: 100%; /* Full width */
+  height: 100%; /* Full height */
+  padding: 20px;
+  overflow: auto;
+  border: none;
+  box-shadow: none;
+  background-color: rgba(255, 255, 255, 0.95);
+  z-index: 2000;
+  box-sizing: border-box;
+}
+
+/* Show the close button in playground mode */
+.settings-menu.playground-mode .close-settings-btn {
+  display: block;
+}
+
+/* Hide the close button by default */
+.close-settings-btn.hidden {
+  display: none;
+}
+
+/* Hide playground options by default */
+.hidden {
+  display: none;
+}
+
+
+

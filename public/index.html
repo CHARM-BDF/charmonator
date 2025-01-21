@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>charmonator</title>
+  
+  <!-- Viewport Meta Tag for Mobile Devices -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- Include highlight.js for syntax highlighting -->
+  <link 
+    rel="stylesheet" 
+    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/default.min.css"
+  >
+  
+  <!-- Font Awesome for icons -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  />
+</head>
+
+<body>
+  <div class="chat-container">
+
+    <!-- Chat Header -->
+    <header class="chat-header">
+      <h1 id="appTitle">charmonator</h1>
+ 
+      <!-- Active Model Display -->
+      <div id="activeModelDisplay" class="active-model-display"></div>
+      
+      <!-- Settings Button -->
+      <button id="settingsBtn" class="settings-button" aria-label="Settings">
+        <!-- Using Font Awesome for the gear icon -->
+        <i class="fas fa-cog"></i>
+      </button>
+
+      <!-- Settings Dropdown Menu -->
+      <div id="settingsMenu" class="settings-menu hidden">
+
+        <!-- Close button for playground mode -->
+        <button id="closeSettingsBtn" class="close-settings-btn hidden">&times;</button>
+
+        <div class="settings-option">
+          <label for="modelSelect">Model Choice:</label>
+          <select id="modelSelect">
+            <option value="" disabled selected>Loading models...</option>
+            <!-- Add more models here as needed -->
+          </select>
+        </div>
+
+        <div id="playgroundOptions" class="hidden">
+          <div class="settings-option">
+            <label for="systemMessage">System Message:</label>
+            <textarea id="systemMessage" rows="5" placeholder="Enter system message..."></textarea>
+          </div>
+          <div class="settings-option">
+            <label for="temperature">Temperature:</label>
+            <input type="number" id="temperature" min="0.0" max="1.0" step="0.05" value="0.8">
+          </div>
+        </div>
+
+      </div>
+    </header>
+
+    <!-- Main Chat Area -->
+    <main class="chat-main" id="chatMain"></main>
+
+    <!-- Thinking Indicator -->
+    <div id="thinkingIndicator" class="thinking-indicator hidden">
+      <div class="dot-flashing"></div>
+    </div>
+
+    <!-- Chat Footer -->
+    <footer class="chat-footer">
+      
+      <!-- Message Input -->
+      <div class="input-container">
+        <textarea id="messageInput" placeholder="Type a message..." autocomplete="off"></textarea>
+        <button id="sendBtn">Send</button>
+      </div>
+
+      <!-- File attachment -->
+      <div id="dropArea" class="drop-area">
+        <label for="fileInput" id="fileInputLabel">Attach Files</label>
+        <!-- Include image extensions in accept attribute -->
+        <input type="file" 
+               id="fileInput" 
+               multiple 
+               accept=".txt,.md,.docx,.pdf,.py,.js,.java,.c,.cpp,.cs,.rb,.go,.rs,.php,.html,.css,.json,.xml,.sh,.bat,.jpg,.jpeg,.png,.gif" />
+      </div>
+
+      <!-- Attachments Display Area -->
+      <div id="attachments" class="attachments-container"></div>
+
+    </footer>
+  </div>
+
+  <!-- Include Marked.js -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Include Highlight.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+
+  <!-- Include DOMPurify for sanitization -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.0/purify.min.js"
+    integrity="sha512-/hVAZO5POxCKdZMSLefw30xEVwjm94PAV9ynjskGbIpBvHO9EBplEcdUlBdCKutpZsF+La8Ag4gNrG0gAOn3Ig=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <!-- Include script.js -->
+  <script type="module" src="./script.js"></script>
+
+</body>
+
+</html>
