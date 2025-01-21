@@ -40,10 +40,22 @@ Future versions will support:
 A design goal for charmonizer is to abstract over underlying limits of individual language models, such as context-length limits.
 
 
-## Schemas
+## Short version: How to run
 
-Apart from the service, charmonator also 
+Create a config file at `conf/config.json` with the following structure.
 
+You can create an example config with `scripts/create-example-config.js`.
+
+Then, modify it to suit your needs.
+
+
+To run the server, execute:
+
+```
+node server.js
+```
+
+The server will start on the port specified in the config file, and you can begin making requests to the API endpoints in [docs/api-docs.md](./docs/api-docs.md).
 
 
 ## Configuration management
@@ -67,6 +79,11 @@ For more information on currently provided endpoints, see [api-docs.md](./docs/a
 
 
 ## TODOs
+
+
+### TODO: Fix and add package.json 
+
+### TODO: Add section to README on how to run
 
 
 ### TODO: Create an "apps" entry in config file, and move public/ to an entry for a "playground" app/
