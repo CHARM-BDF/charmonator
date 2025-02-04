@@ -9,9 +9,9 @@ The intent is to provide a simple, unified interface to a variety of generative 
 
 And, instead of re-implementing these in every language, each language can develop a library that acts as wrappers around these APIs and the core JSON data structures.
 
-For documentation on endpoints, please see [docs/api-docs.md]
+For documentation on endpoints, please see [api-docs.md](docs/api-docs.md).
 
-For documentation on the JSON document object schema, please see [docs/document.md]
+For documentation on the JSON document object schema, please see [document.md](docs/document.md).
 
 
 **Charmonator** is a RESTful abstraction over generative AI models, currently supporting:
