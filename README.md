@@ -1,5 +1,8 @@
 # Charmonator (and Charmonizer) README
 
+**Note**: Endpoints defined in this repository are not yet stable, so please take caution when upgrading to new versions.
+
+
 This server exports two RESTful APIs from one httpd: charmonator and charmonizer.
 
 The intent is to provide a simple, unified interface to a variety of generative AI models and data harmonization tasks.
