@@ -75,9 +75,10 @@ It also specifies named model descriptions, so that a named model can have model
 
  - the specific model provider / backend API
  - any associated access / API keys required
-
- - system messages
- - temperature 
+ - model-specific parameters, such as:
+   + system / developer messages
+   + temperature 
+   + reasoning effort
 
 
 ## Endpoints
