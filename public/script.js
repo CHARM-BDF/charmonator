@@ -167,6 +167,43 @@ modelSelect.addEventListener('change', (event) => {
   setModel(event.target.value);
 });
 
+
+
+
+
+
+// Check if a specialized mode is enabled:
+if (hash_params.mode) {
+  console.log("Specialized mode detected:", hash_params.mode);
+  let mode = hash_params.mode;
+
+  let title = mode.title ;
+  let model = mode.model ;
+
+  let instructions = mode.instructions ;
+
+  let disableSettings = mode.disableSettings ;
+
+  setModel(model) ;
+
+  appTitleText.textContent = title ;
+
+  // Set the papge title as well:
+  document.title = title ;
+
+  addMessage(instructions, 'assistant');
+
+  if (disableSettings) {
+    settingsMenu.style.display = 'none';
+    settingsBtn.style.display = 'none';
+    activeModelDisplay.style.display = 'none';
+  }
+
+}
+
+
+
+
 /**
  * Render a message in the chat UI
  */
@@ -272,7 +309,7 @@ function validateFile(file) {
 }
 
 /**
- * If file is an image, we skip /api/convert and read it as base64 in the browser.
+ * If file is an image, we skip /api/charmonator/v1/conversion and read it as base64 in the browser.
  */
 async function uploadAndConvertImageFile(file) {
   return new Promise((resolve, reject) => {
@@ -294,7 +331,7 @@ async function uploadAndConvertDocFile(file) {
   formData.append('file', file);
 
   try {
-    const response = await fetch('./api/charmonator/v1/quick_convert', {
+    const response = await fetch('./api/charmonator/v1/conversion/file', {
       method: 'POST',
       body: formData,
     });

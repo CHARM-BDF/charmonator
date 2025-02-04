@@ -1,13 +1,13 @@
 # Charmonator / Charmonizer API Documentation
 
-This document integrates three previously separate files (`api-docs.md`, `document.md`, `transcript.md`) into a single reference. The first sections describe the RESTful endpoints exposed by **Charmonator** and **Charmonizer**. Later sections define the **Transcript JSON Structure** (used for conversation transcripts) and the **Document Object Specification** (used for chunk-based document representations).
+This document describes the **RESTful endpoints** exposed by **Charmonator** and **Charmonizer**, as well as the underlying JSON structures for transcripts and documents.
 
 ---
 
 ## Overview of Services
 
-- **Charmonator** handles lower-level LLM interactions (chat, embeddings, tool invocation).
-- **Charmonizer** handles more complex data/document transformations, potentially returning JSON “document objects” with chunk-level structures (pages, sentences, etc.).
+- **Charmonator** handles lower-level LLM interactions (chat, embeddings, tool invocation).  
+- **Charmonizer** handles more complex data/document transformations, potentially returning JSON “document objects” with chunk-level structures (pages, sentences, etc.), along with summarization, boundary detection, etc.
 
 ### Base URLs
 
@@ -19,7 +19,7 @@ This document integrates three previously separate files (`api-docs.md`, `docume
   ```
   http://<server>:<port>/<base-url-prefix>/api/charmonizer/v1
   ```
-  *(Adjust `<server>`, `<port>`, `<base-url-prefix>` to match your deployment.)*
+*(Adjust `<server>`, `<port>`, `<base-url-prefix>` to match your deployment.)*
 
 ---
 
@@ -30,7 +30,9 @@ This document integrates three previously separate files (`api-docs.md`, `docume
 ```
 GET /models
 ```
+
 - **Description**: Lists all configured AI models for the server.
+
 - **Response**:
   ```json
   {
@@ -48,6 +50,7 @@ GET /models
     ]
   }
   ```
+
 - **Errors**:
   - 500 if an unexpected error occurs.
 
@@ -58,7 +61,8 @@ GET /models
 ```
 POST /chat/extend_transcript
 ```
-- **Description**: Extends an existing conversation transcript using the specified model. This endpoint returns new messages in the conversation (usually from the assistant, and possibly tool calls and responses).  
+
+- **Description**: Extends an existing conversation transcript using a specified model. This endpoint returns new messages in the conversation (usually from the assistant, possibly with tool calls/responses).  
 - **Uses**: [Transcript JSON Structure](#transcript-json-structure)
 
 #### Request Body (example)
@@ -101,80 +105,142 @@ POST /chat/extend_transcript
   - 400 if required fields are missing.
   - 500 on unexpected errors.
 
-*(For a full definition of `transcript` and how messages, tool calls, and attachments are structured, see the [Transcript JSON Structure](#transcript-json-structure) section.)*
+*(See [Transcript JSON Structure](#transcript-json-structure) below.)*
 
 ---
 
 ### 3. Convert Image to Markdown
 
 ```
-POST /convert/image_to_markdown
+POST /conversion/image
 ```
-- **Description**: Transcribes/describes an image (data URL or remote URL) into Markdown text.
+
+- **Description**:  
+  - Transcribes or describes an image (data URL or remote URL) into Markdown.  
+  - Determines whether it is likely the **first page** of a document.  
+  - Optionally generates a short `"description"` of the image contents (1–3 sentences).  
+  - Optionally matches tags (provided by the user) in the resulting Markdown text.
+
 - **Request Body**:
   ```jsonc
   {
-    "imageUrl": "data:image/png;base64,iVBOR...",
-    "description": "A scanned tax document",
+    "imageUrl": "data:image/png;base64,iVBOR...", // Required
+    "preceding_image_url": "data:image/png;base64,iVBOR...", // Optional
+    "description": "A scanned tax document",    // Additional context
     "intent": "Extract textual data",
     "graphic_instructions": "Describe diagrams if present",
     "preceding_content": "...",
     "preceding_context": "...",
-    "model": "llama-vision-mini"
+    "model": "llama-vision-mini",
+    "describe": true, // (optional, default true)
+    "tags": {         // (optional) map of tagName -> substring
+      "footnotes": "Footnote",
+      "signature": "Signed by"
+    }
   }
   ```
+  - **`imageUrl`**: (required) data URL or remote URL for the image.  
+  - **`preceding_image_url`**: (optional) helps detect if this is first page.  
+  - **`describe`**: (boolean, default = `true`) if set, the response includes a `"description"` field.  
+  - **`tags`**: (object, optional) map from tag name → substring. If provided, any matching tag names will be returned in the `"tags"` array if the substring is found in the transcription.
+
 - **Response**:
-  ```json
+  ```jsonc
   {
-    "markdown": "# Transcribed data\n..."
+    "markdown": "# Transcribed data\n...",
+    "isFirstPage": false,
+    "description": "1-3 sentence summary of the image contents.", // only if "describe" = true
+    "tags": ["footnotes"] // only if "tags" was provided
   }
   ```
+  - **`markdown`**: the transcription in Markdown.  
+  - **`isFirstPage`**: boolean indicating if this page is likely the first page of a new document.  
+  - **`description`**: present only if `describe` is `true`.  
+  - **`tags`**: present only if the user provided `tags`. Contains an array of tag names that matched.
+
 - **Errors**:
   - 400 if `imageUrl` is missing.
-  - 500 on internal errors.
+  - 500 on internal server errors.
 
 ---
 
-### 4. Convert File to Markdown (Quick Approach)
+### 4. Convert File to Markdown 
 
 ```
-POST /convert
+POST /conversion/file
 ```
-- **Description**: Converts supported file types (e.g., `.docx`, `.pdf`) to Markdown. (A simpler approach; may not produce chunk-structured output.)
+
+- **Description**: Converts supported file types (e.g., `.docx`, `.pdf`, `.txt`) to plain Markdown in a single shot. May not produce chunk-level detail (unlike the more complex Charmonizer routes).
+
 - **Content-Type**: `multipart/form-data`
+
 - **Request**:
-  - `file` (file) = file to convert.
+  - `file` = the file to convert.
+
 - **Response**:
   ```json
   {
     "markdownContent": "# Some Document\n..."
   }
   ```
+
 - **Errors**:
-  - 400 if no file is provided or unsupported file type.
+  - 400 if no file or if file type is unsupported.
   - 500 on conversion failure.
 
 ---
 
+### 5. Generate Embedding
+
+```
+POST /embedding
+```
+
+- **Description**: Creates an embedding vector for the given text.
+
+- **Request Body**:
+  ```jsonc
+  {
+    "model": "gpt-4o-embedding",
+    "text": "This is some text to embed."
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "embedding": [ 0.123, -0.045, 1.234, ... ]
+  }
+  ```
+- **Notes**:
+  - The `model` must refer to a configured model that supports embeddings.
+
+- **Errors**:
+  - 400 if required fields are missing.
+  - 400 if the specified model does not support embeddings.
+  - 500 on unexpected server errors.
+
+---
 
 ## Charmonizer Endpoints
 
-### 6. Convert Document
+### 6. Convert Document (Long-Running with Page Tracking)
 
 ```
-POST /convert/document
+POST /conversions/documents
 ```
-- **Description**: Converts/transcribes an uploaded document (e.g. PDF) into a [JSON Document Object](#document-object-specification) with chunk-based structure (pages, etc.).  
-- **Note**: This is a **long-running** endpoint returning a `job_id`. Currently only PDFs are supported, but the design is general for any type of document.
 
-**Content-Type**: `multipart/form-data` or JSON with base64.  
+- **Description**: Converts/transcribes an uploaded PDF into a [JSON Document Object](#document-object-specification) with chunk-based structure (e.g. pages). This is a **long-running** job that returns a `job_id` so you can poll until done.  
+- **Currently** supports **PDF**.  
+- **Content-Type**: `multipart/form-data` or JSON with base64.
 
-#### Request Body (typical)
+#### Request Body
 
-- `file` (file) or `pdf_dataurl` – the PDF.  
-- `model` (string, optional) – fallback LLM if OCR confidence is low.  
-- `ocr_threshold` (float, optional) – threshold for deciding fallback.  
-- `page_numbering` (boolean-ish string, optional) – “true” or “false.”
+- **`file`** (multipart) **OR** `pdf_dataurl` (base64) — the PDF data.  
+- **`model`** (string, optional) — fallback LLM if OCR confidence is low or if boundary detection is needed.  
+- **`ocr_threshold`** (float, optional) — threshold for deciding fallback (default: `0.7`).  
+- **`page_numbering`** (string, optional) — `"true"` or `"false"` (default: `"true"`)  
+- **`description`, `intent`, `graphic_instructions`** (optional) — context strings for fallback model.  
+- **`detect_document_boundaries`** (string, optional) — `"true"` or `"false"` (default: `"false"`)  
 
 #### Immediate Response
 
@@ -182,21 +248,37 @@ POST /convert/document
 { "job_id": "some-uuid" }
 ```
 
-#### Then Poll
+#### Poll Job Status
 
 ```
-GET /convert/document/jobs/{job_id}
-GET /convert/document/jobs/{job_id}/result
+GET /conversions/documents/{jobId}
 ```
 
-#### Final Result (once complete)
+**Response** (example):
+```json
+{
+  "job_id": "3f8c0edf-bb80-4c4f-a837-915d1a70ec75",
+  "status": "processing",
+  "error": null,
+  "createdAt": 1676677712765,
+  "pages_total": 10,
+  "pages_converted": 3
+}
+```
+- `status` can be `"pending"`, `"processing"`, `"complete"`, or `"error"`.  
+- `pages_total` is the total pages recognized.  
+- `pages_converted` is how many pages have been processed so far.
 
-A [Document Object](#document-object-specification).  
-The top-level `id` is typically the file’s SHA-256.  
-The `content` field is the entire doc text (if generated).  
-The `chunks.pages` array holds page-level chunk objects, each with `metadata` for page_number, text_extraction_method, etc.
+#### Poll Final Result
 
-**Example** final JSON:
+```
+GET /conversions/documents/{jobId}/result
+```
+- If `pending`/`processing`, returns **202** + partial status.
+- If `error`, returns **500** + an error message.
+- If `complete`, returns the final [Document Object](#document-object-specification).  
+
+**Example** final doc object:
 ```json5
 {
   "id": "abcdef1234...sha256",
@@ -204,7 +286,8 @@ The `chunks.pages` array holds page-level chunk objects, each with `metadata` fo
   "metadata": {
     "mimetype": "application/pdf",
     "document_sha256": "abcdef1234...",
-    "size_bytes": 12345
+    "size_bytes": 12345,
+    "originating_filename": "myfile.pdf"
   },
   "chunks": {
     "pages": [
@@ -218,55 +301,98 @@ The `chunks.pages` array holds page-level chunk objects, each with `metadata` fo
           "page_number": 1,
           "text_extraction_method": "ocr",
           "extraction_confidence": 0.95,
-          "model_name": null
+          "model_name": null,
+          "isFirstPage": true,
+          "tags": ["footnotes"] // example if tags matched
+        },
+        "annotations": {
+          "description": "A short summary of what is on this page"
         }
       },
-      {
-        "id": "abcdef1234.../pages@1",
-        "parent": "abcdef1234...",
-        "start": 1000,
-        "length": 900,
-        "content": "# Page 2 text in markdown...",
-        "metadata": {
-          "page_number": 2,
-          "text_extraction_method": "vision_model",
-          "extraction_confidence": 0.90,
-          "model_name": "gpt-4o"
-        }
-      }
       // ...
     ]
   }
 }
 ```
+- If `describe=true`, each page chunk may include `annotations.description`.  
+- If `tags` were provided and a substring matched in the text, `metadata.tags` includes those tag names.
+
+#### Cancel or Delete a Job
+
+```
+DELETE /conversions/documents/{jobId}
+```
+- Removes the job (and any cached data) from the server.
 
 - **Errors**:
-  - 400 if file is missing or unsupported type.
-  - 500 on internal errors.
+  - 400 if file missing/unsupported
+  - 500 on internal errors
 
 ---
 
-### 7. Summarize a Document
+### 7. Summarize a Document (Long-Running)
 
 ```
-POST /summarize
+POST /summaries
 ```
-- **Description**: Summarizes a [Document Object](#document-object-specification) (from e.g. `/convert/document`) in either a single pass or chunk-by-chunk.
-- **Note**: This is also a **long-running** endpoint returning `job_id`. It supports **4** summarization methods: `"full"`, `"map"`, `"fold"`, `"delta-fold"`.
+
+- **Description**: Summarizes a [Document Object](#document-object-specification) in either a single pass or chunk-by-chunk. Returns a `job_id` to poll.
+
+- **Methods**: **`"full"`, `"map"`, `"fold"`, or `"delta-fold"`**.
+  - `"full"` = single pass on the entire doc
+  - `"map"` = summarize each chunk individually (optionally with some context from before/after each chunk)
+  - `"fold"` = iterative accumulation
+  - `"delta-fold"` = iterative partial accumulation
+
+- **JSON-Structured Summaries**: Optionally specify `json_schema` to enforce a JSON format.
 
 #### Request Body
 
 ```jsonc
 {
-  "document": { ... },     // The doc object (id, content, chunks, etc.)
-  "model": "gpt-4o",       // which LLM to use
-  "method": "full",        // or "map", "fold", "delta-fold"
-  "chunk_group": "pages",  // if method != "full"
-  "preceding_chunks": 1,   // optional, for chunk-based methods
-  "guidance": "Use bullet points only.",   // sub-prompt to shape summary style
-  "temperature": 0.7
+  "document": { /* The doc object */ },
+  "model": "gpt-4o",
+  "method": "fold",            // or "full", "map", "delta-fold"
+  "chunk_group": "pages",      // required if method != "full"
+  "context_chunks_before": 1,  // optional
+  "context_chunks_after": 2,   // optional
+  "guidance": "Use bullet points only.", // optional instructions
+  "temperature": 0.7,
+
+  // optional JSON schema for structured output
+  "json_schema": {
+    "type": "object",
+    "properties": {
+      "title": { "type": "string" },
+      "summary_points": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "required": ["title", "summary_points"]
+  },
+
+  // optional, controls how "delta" merges with existing summary in "delta-fold"
+  "json_sum": "append",  // default is "append"
+
+  // NEW (Optional) - seeds the accumulation for fold/delta-fold
+  // For "fold", can be text or JSON; for "delta-fold", typically an array of "delta" entries
+  "initial_summary": "This is the starting summary so far..."
 }
 ```
+
+- **`document`**: The doc object to summarize.  
+- **`method`**: `"full"`, `"map"`, `"fold"`, or `"delta-fold"`.  
+- **`chunk_group`**: Which chunk group (like `"pages"`) to operate on when method != `"full"`.  
+- **`context_chunks_before`**/**`context_chunks_after`**: How many chunks to pass in as context.  
+- **`model`**: LLM to use.  
+- **`guidance`**: Additional user instructions.  
+- **`temperature`**: LLM temperature (float).  
+- **`json_schema`**: If given, output is forced to conform to that schema.  
+- **`json_sum`**: For `"delta-fold"`, how new deltas combine with the existing summary (usually `"append"`).  
+- **`initial_summary`**: *Optional*—If you want to *seed* the accumulated summary for `"fold"` or `"delta-fold"` with an existing summary.  
+  - For **fold**, it can be any string/object you want to fold into subsequent chunks.  
+  - For **delta-fold**, it is usually an **array**, so you can continue appending new deltas to that array.
 
 #### Immediate Response
 
@@ -274,21 +400,112 @@ POST /summarize
 { "job_id": "some-uuid" }
 ```
 
-#### Then Poll
+#### Polling Job Status
 
 ```
-GET /summarize/jobs/{job_id}
-GET /summarize/jobs/{job_id}/result
+GET /summaries/{job_id}
 ```
 
-#### Final Result
+**Response** (example):
+```json
+{
+  "status": "processing",
+  "chunks_total": 3,
+  "chunks_completed": 1
+}
+```
+- **`status`**: `"pending"`, `"processing"`, `"complete"`, or `"error"`.  
 
-Returns the **document object** again, now with either:
-- A `summary` field at the top-level (for `full`, `fold`, `delta-fold`), or
-- `summary` fields in each chunk (for `map`), depending on method.
+#### Retrieving Final Result
 
-**Example** (if `map`):
+```
+GET /summaries/{job_id}/result
+```
+- If still `pending`/`processing`: HTTP 202 + partial status  
+- If `error`: HTTP 500 + error message  
+- If `complete`: returns the final doc object with summaries stored in `annotations.summary`.
+
+**Example** final doc object:
+
 ```jsonc
+{
+  "id": "mydoc-sha256",
+  "content": "...",
+  "annotations": {
+    "summary": "High-level summary from 'full' or 'fold'"
+  },
+  "chunks": {
+    "pages": [
+      {
+        "id": "mydoc-sha256/pages@0",
+        "content": "...",
+        "annotations": {
+          "summary": "Page 1 summary..."
+        }
+      }
+    ]
+  }
+}
+```
+*(If you requested a `json_schema`, then the `summary` might be structured JSON. If method = `delta-fold`, then `annotations.summary` could be an **array** of delta items.)*
+
+---
+
+### 8. Compute Embeddings for a Document (Long-Running)
+
+```
+POST /embeddings
+```
+
+- **Description**: Computes embeddings for all chunks in a specified group (usually `"pages"`). Returns a `job_id` to poll for completion.
+
+#### Request Body
+
+```jsonc
+{
+  "document": { ... },
+  "model": "my-embedding-model",
+  "chunk_group": "pages"
+}
+```
+
+- **`document`**: A [Document Object](#document-object-specification).  
+- **`model`**: Embedding model name.  
+- **`chunk_group`**: Which chunk group to embed (e.g. `"pages"`).
+
+#### Immediate Response
+
+```json
+{ "job_id": "some-uuid" }
+```
+
+#### Poll Job Status
+
+```
+GET /embeddings/{jobId}
+```
+**Response** (example):
+```json
+{
+  "status": "processing",
+  "chunks_total": 5,
+  "chunks_completed": 2,
+  "error": null
+}
+```
+
+#### Poll Final Result
+
+```
+GET /embeddings/{jobId}/result
+```
+- If `pending`/`processing`, returns **202** + partial status.  
+- If `error`, returns **500** with an error.  
+- If `complete`, returns the final doc object with an `embeddings` field in each chunk.
+
+**Example**:
+
+```json5
 {
   "id": "mydoc-sha256",
   "content": "...",
@@ -296,22 +513,25 @@ Returns the **document object** again, now with either:
     "pages": [
       {
         "id": "mydoc-sha256/pages@0",
-        "content": "page1 text",
-        "summary": "Page 1 summary..."
-      },
-      {
-        "id": "mydoc-sha256/pages@1",
-        "content": "page2 text",
-        "summary": "Page 2 summary..."
+        "content": "...",
+        "embeddings": {
+          "my-embedding-model": [0.0123, 0.0456, -0.789, ...]
+        }
       }
     ]
   }
 }
 ```
 
-- **Errors**:
-  - 400 if missing fields or method unknown
-  - 500 on unexpected error
+---
+
+#### Cancel or Delete a Job
+
+```
+DELETE /embeddings/{jobId}
+```
+- Removes the job (and any data) from the server.  
+- Response: `{ "success": true }`
 
 ---
 
@@ -319,24 +539,23 @@ Returns the **document object** again, now with either:
 
 All endpoints produce appropriate HTTP status codes on errors:
 
-- **400** if required fields are missing or invalid.  
-- **404** if a requested resource/job is not found.  
-- **500** for unexpected server errors.
+- **400** if required fields are missing or invalid  
+- **404** if a resource/job is not found  
+- **500** for unexpected server errors  
 
-In such cases, the response typically is:
+The response typically:
 ```json
-{ "error": "Some error message" }
+{ "error": "Error message" }
 ```
 
 ---
 
 ## Transcript JSON Structure
 
-Many conversation-based endpoints in Charmonator (such as `/chat/extend_transcript`) rely on a **Transcript JSON** format. Below is a complete specification for that structure.
+Endpoints like `/chat/extend_transcript` expect or return a **Transcript JSON** format. 
 
 ### Overview
 
-A transcript is an object with:
 ```json
 {
   "messages": [
@@ -344,291 +563,68 @@ A transcript is an object with:
   ]
 }
 ```
-where **`messages`** is an array of “message” objects in chronological order (oldest first).
+where **`messages`** is an array in chronological order.
 
 ### Message Objects
 
-Each message in `transcript.messages` is:
-```json
+```jsonc
 {
   "role": "user" | "assistant" | "system" | "developer" | "tool_call" | "tool_response",
-  "content": "...or array..."
+  "content": "... or an array of text/attachments ..."
 }
 ```
-#### `role` Field
+- For `tool_call` or `tool_response`, `content` may contain special objects describing calls/responses.
 
-- `"user"`: from the end-user  
-- `"assistant"`: from the assistant  
-- `"system"`: system instructions  
-- `"developer"`: developer-level instructions  
-- `"tool_call"`: the assistant is calling a tool (function).  
-- `"tool_response"`: a tool’s response to that call.
-
-*(In some code bases, LLM function calls might appear with role `"function"`, but here we use `"tool_call"` / `"tool_response"`. )*
-
-#### `content` Field
-
-- May be a **string** (typical message text).
-- May be an **array**, which can mix:
-  1. Strings
-  2. Attachments (images, documents, etc.)
-  3. Tool call or tool response objects
-
-##### Attachments
-
-For example:
-```json5
-{
-  "type": "image",
-  "url": "data:image/png;base64,iVBOR..."
-}
-```
-or
-```json5
-{
-  "type": "document",
-  "filename": "myfile.md",
-  "content": "# Some Markdown content"
-}
-```
-  
-##### Tool Calls
-
-When `role` is `"tool_call"`, `content` typically holds a single call object:
-```json5
-{
-  "toolName": "calculator",
-  "callId": "call-12345",
-  "callType": "function",
-  "arguments": {
-    "expression": "3 + 4"
-  },
-  "rationale": "We want to compute a sum."
-}
-```
-- **`toolName`**: name of the tool.  
-- **`callId`**: unique ID for this call.  
-- **`callType`**: typically `"function"`.  
-- **`arguments`**: JSON arguments to pass to the tool.  
-- **`rationale`**: optional explanation or reasoning.
-
-##### Tool Responses
-
-When `role` is `"tool_response"`, `content` typically holds a single response object:
-```json5
-{
-  "toolName": "calculator",
-  "callId": "call-12345",
-  "response": "7.0"
-}
-```
-- **`toolName`**: name of the tool invoked.  
-- **`callId`**: must match the preceding tool call.  
-- **`response`**: textual or JSON result from the tool.
-
-### Example Usage in `extend_transcript`
-
-**Request** to `POST /chat/extend_transcript` might look like:
-```json
-{
-  "model": "gpt-4o",
-  "system": "You are a programming assistant...",
-  "temperature": 0.7,
-  "transcript": {
-    "messages": [
-      {
-        "role": "user",
-        "content": "Hi, can you show me how to parse JSON in JavaScript?"
-      }
-    ]
-  },
-  "tools": [
-    {
-      "name": "web_search",
-      "description": "Search the web for info",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "query": { "type": "string" }
-        }
-      }
-    }
-  ]
-}
-```
-
-**Response** (suffix of new messages):
-```json
-{
-  "messages": [
-    {
-      "role": "assistant",
-      "content": "Sure, here is a simple example using JSON.parse..."
-    }
-  ]
-}
-```
+See the server’s code or additional docs for usage examples.
 
 ---
 
 ## Document Object Specification
 
-Many Charmonizer endpoints (like `/convert/document` and `/summarize`) utilize a **Document Object** format to represent content in chunked form for analysis, summarization, searching, and transformation.
-
-Below is a detailed JSON specification for these “document objects.”
+Many Charmonizer endpoints (like `/conversions/documents`, `/summaries`, `/embeddings`) use a **JSON Document Object** to represent content in chunked form for analysis, summarization, or embedding.
 
 ### Key Fields
 
 1. **`id`** (string, required)  
-   - Unique ID (e.g. file’s SHA-256, or a chunk ID derived from a parent).
+   - A unique ID (e.g. file’s SHA-256).
 2. **`content`** (string, optional)  
-   - Full Markdown text for this document/chunk.  
-   - If omitted, the text may be inferred via `parent + start + length` or by reassembling from sub-chunks.
-3. **`summary`** (string, optional)  
-   - A condensed representation of the content (e.g., from a summarization process).
-4. **`parent`** (string, optional)  
-   - The `id` of the parent doc from which this chunk is derived.
-5. **`start`** (integer, optional)  
-   - 0-based index into the parent’s `content` for this chunk’s text.
-6. **`length`** (integer, optional)  
-   - Number of characters in the parent’s `content` belonging to this chunk.
-7. **`content_chunk_group`** (string, optional)  
-   - If this doc’s full text is composed by concatenating a sub-chunk group, specify the group name here.
-8. **`chunks`** (object, optional)  
-   - A mapping from chunk-group-name → array of child document objects. Each child is structured similarly (`id`, `content`, `parent`, etc.).
+   - Full Markdown text for this doc.  
+3. **`parent`** (string, optional)  
+   - The `id` of a parent doc if this is a chunk.  
+4. **`start`** (integer, optional), **`length`** (integer, optional)  
+   - If referencing a parent’s substring.  
+5. **`chunks`** (object, optional)  
+   - A map from chunk-group-name (like `"pages"`) to an array of child objects (which are also doc objects).  
+6. **`annotations`** (object, optional)  
+   - A free-form dictionary of annotations about the doc/chunk.  
+7. **`metadata`** (object, optional)  
+   - A free-form dictionary of metadata about the doc/chunk (e.g. `filename`, `page_number`, `tags`, etc.).  
+8. **`embeddings`** (object, optional)  
+   - A map from model-name → numeric array.
 
-### Example Structures
-
-#### 1. Original PDF Document with Pages
-
-```json5
-{
-  "id": "0ab6f8... (sha256)",
-  "content": "...the entire PDF in markdown...",
-  "chunks": {
-    "pages": [
-      {
-        "id": "0ab6f8.../pages@0",
-        "parent": "0ab6f8...",
-        "start": 0,
-        "length": 1000,
-        "content": "# Page 1\nHere is page 1 text..."
-      },
-      {
-        "id": "0ab6f8.../pages@1",
-        "parent": "0ab6f8...",
-        "start": 1000,
-        "length": 900,
-        "content": "# Page 2\n..."
-      }
-    ]
-  }
-}
-```
-
-#### 2. Document Without Direct `content`, Reassembled from “pages”
-
-```json5
-{
-  "id": "0ab6f8... (sha256)",
-  "content_chunk_group": "pages",
-  "chunks": {
-    "pages": [
-      {
-        "id": "0ab6f8.../pages@0",
-        "parent": "0ab6f8...",
-        "start": 0,
-        "length": 1000,
-        "content": "# Page 1\n..."
-      },
-      {
-        "id": "0ab6f8.../pages@1",
-        "parent": "0ab6f8...",
-        "start": 1000,
-        "length": 900,
-        "content": "# Page 2\n..."
-      }
-    ]
-  }
-}
-```
-
-#### 3. Multi-level Chunking (Pages, Sentences)
+### Example
 
 ```json5
 {
   "id": "0ab6f8... (sha256)",
   "content": "...the entire doc in markdown...",
+  "metadata": {
+    "filename": "mydoc.pdf"
+  },
   "chunks": {
     "pages": [
       {
         "id": "0ab6f8.../pages@0",
-        "parent": "0ab6f8...",
-        "start": 0,
-        "length": 1200,
-        "chunks": {
-          "sentences": [
-            {
-              "id": "0ab6f8.../pages@0/sentences@0",
-              "parent": "0ab6f8.../pages@0",
-              "start": 0,
-              "length": 60
-            },
-            {
-              "id": "0ab6f8.../pages@0/sentences@1",
-              "parent": "0ab6f8.../pages@0",
-              "start": 60,
-              "length": 100
-            }
-          ]
+        "content": "# Page 1 text...",
+        "metadata": {
+          "page_number": 1,
+          "tags": ["footnotes"]
+        },
+        "annotations": {
+          "description": "1-3 sentences summarizing the page"
         }
-      },
-      {
-        "id": "0ab6f8.../pages@1",
-        "parent": "0ab6f8...",
-        "start": 1200,
-        "length": 950
       }
     ]
   }
 }
 ```
-
-#### 4. Summaries in the Document
-
-```json
-{
-  "id": "mydoc-sha256",
-  "content": "...",
-  "summary": "High-level summary if you did a 'full' or 'fold' approach",
-  "chunks": {
-    "pages": [
-      {
-        "id": "mydoc-sha256/pages@0",
-        "content": "...",
-        "summary": "Page 1 summary..."
-      },
-      {
-        "id": "mydoc-sha256/pages@1",
-        "content": "...",
-        "summary": "Page 2 summary..."
-      }
-    ]
-  }
-}
-```
-*(You can have a top-level `summary`, chunk-level `summary`, or both.)*
-
-### Rules Recap
-
-1. Every document object has an **`id`**.  
-2. **`content`** is optional. If absent, use `start/length/parent` or `content_chunk_group`.  
-3. **`chunks`** is a mapping from chunk-group-name → sorted array of child objects.  
-4. A child chunk references its parent with `parent`, plus `start` + `length` if needed.  
-5. Summaries can be added at any level in a `summary` field.
-
-This structure supports single-tier or multi-tier chunking, as well as partial or complete text. It’s used for ingestion, transformation, and summarization pipelines within Charmonizer.
-
----
-
-**End of integrated API documentation.**
