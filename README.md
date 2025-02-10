@@ -5,7 +5,8 @@
 
 This server exports two RESTful APIs from one httpd: charmonator and charmonizer.
 
-The intent is to provide a simple, unified interface to a variety of generative AI models and data harmonization tasks.
+The intent is to provide a simple, unified interface to a variety of generative AI models and data transformation/harmonization tasks.
+
 
 And, instead of re-implementing these in every language, each language can develop a library that acts as wrappers around these APIs and the core JSON data structures.
 
@@ -13,6 +14,41 @@ For documentation on endpoints, please see [api-docs.md](docs/api-docs.md).
 
 For documentation on the JSON document object schema, please see [document.md](docs/document.md).
 
+## Jump to:
+
+ - [How to run](#how-to-run)
+ - [What is charmonator?](#what-is-charmonator)
+ - [What is charmonizer?](#what-is-charmonizer)
+ - [Configuration management](#configuration-management)
+ - [Endpoints](#endpoints)
+
+<a name="how-to-run"></a>
+## How to run
+
+Create a config file at `conf/config.json`.
+
+You can create an example config with `scripts/generate-example-config.js`:
+
+```bash
+node scripts/generate-example-config.js > conf/config.json
+```
+
+Then, modify it to suit your needs, such as placing your API keys for OpenAI/Anthropic/etc. in the appropriate places, and making new model entries.
+
+
+Once configured, to run the server, execute:
+
+```
+node server.js
+```
+
+The server will start on the port specified in the config file, and you can begin making requests to the API endpoints in [docs/api-docs.md](./docs/api-docs.md).
+
+
+
+
+<a name="what-is-charmonator"></a>
+## What is charmonator?
 
 **Charmonator** is a RESTful abstraction over generative AI models, currently supporting:
 
@@ -34,6 +70,10 @@ Applications built on top of charmonator should be able to leverage a mixture of
 Currently, there is initial support for tool-calling, with plans to generalize this support and make it extensible.
 
 
+
+<a name="what-is-charmonizer"></a>
+## What is charmonizer?
+
 **Charmonizer** is a RESTful interface to more complex interface for "data harmonization", currently supporting:
 
  - PDF to markdown transcription
@@ -50,24 +90,7 @@ Future versions will support:
 A design goal for charmonizer is to abstract over underlying limits of individual language models, such as context length limits.
 
 
-## Short version: How to run
-
-Create a config file at `conf/config.json` with the following structure.
-
-You can create an example config with `scripts/create-example-config.js`.
-
-Then, modify it to suit your needs.
-
-
-To run the server, execute:
-
-```
-node server.js
-```
-
-The server will start on the port specified in the config file, and you can begin making requests to the API endpoints in [docs/api-docs.md](./docs/api-docs.md).
-
-
+<a name="configuration-management"></a>
 ## Configuration management
 
 The default configuration for the server is read from `conf/config.json` on start-up.
