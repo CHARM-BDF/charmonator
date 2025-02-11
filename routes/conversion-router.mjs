@@ -10,6 +10,9 @@ import pdfParse from 'pdf-parse';
 import { fetchChatModel } from '../lib/core.mjs';
 import { TranscriptFragment, Message, ImageAttachment } from '../lib/transcript.mjs';
 
+// [ADDED for .doc.json support]
+import { JSONDocument } from '../lib/json-document.mjs';
+
 /**
  * Helper function to remove or mask large data URLs
  * from an object or array structure before logging.
@@ -73,22 +76,14 @@ function stripJsonCodeFence(str) {
  *  - description, intent, graphic_instructions, preceding_content, preceding_context (optional)
  *  - model (string, optional)
  *  - describe (boolean, optional) => default: true
- *  - tags (object or JSON string, optional), e.g.
- *        {
- *          "diagnosis":"Pages with info about a diagnosis or potential diagnosis.",
- *          "treatment":"Pages with info about a treatment or potential treatment."
- *        }
+ *  - tags (object or JSON string, optional)
  *
- * The model will see these tags, along with their definitions, and decide which
- * (if any) apply to the image. The user is relying on the LLM's reasoning,
- * rather than literal substring matching.
- *
- * The endpoint returns JSON in the form:
+ * Returns:
  *  {
  *    "markdown": "...",
  *    "isFirstPage": false,
  *    "description": "...", // if describe=true
- *    "tags": ["diagnosis"] // if the model decides
+ *    "tags": ["someTag"]   // if present
  *  }
  * ============================================================================
  */
@@ -118,7 +113,6 @@ router.post('/image', async (req, res) => {
       try {
         tags = JSON.parse(tags);
       } catch {
-        // if parse fails, we'll treat it as null or log an error
         console.warn('[conversion/image] Unable to parse tags as JSON, ignoring.');
         tags = null;
       }
@@ -128,9 +122,6 @@ router.post('/image', async (req, res) => {
       return res.status(400).json({ error: 'No "imageUrl" provided.' });
     }
 
-    // System instructions: ensure we get structured JSON with keys: "markdown", "isFirstPage",
-    // optional "description" (1–3 sentences, only if user requested `describe=true`),
-    // and optional "tags" (array of tag names from the user-provided definitions, if relevant).
     const systemInstructions =
       `You are an AI that transcribes images into Markdown and determines if the current page ` +
       `is likely the *first page of a new document*. ` +
@@ -138,7 +129,6 @@ router.post('/image', async (req, res) => {
       `Also, optionally include "description" (string) and "tags" (array of strings). ` +
       `Do NOT wrap the JSON in triple backticks. Return ONLY raw JSON.`;
 
-    // Start a transcript
     let transcript = new TranscriptFragment();
     transcript = transcript.plus(new Message('system', systemInstructions));
 
@@ -165,7 +155,6 @@ router.post('/image', async (req, res) => {
       userText += `A preceding page image is provided.\n\n`;
     }
 
-    // If tags are supplied, instruct the model:
     if (tags) {
       userText += `**The user also defines the following tags** (with definitions):\n`;
       for (const [tagName, tagDef] of Object.entries(tags)) {
@@ -174,7 +163,6 @@ router.post('/image', async (req, res) => {
       userText += `\nWhen you return the JSON, you may include "tags": ["tag1","tag2",...] if the page content meets those definitions.\n\n`;
     }
 
-    // If the user wants a 1-3 sentence "description", instruct the model:
     if (describe) {
       userText += `Please include a "description" field with 1–3 sentences summarizing the page.\n`;
     } else {
@@ -183,7 +171,7 @@ router.post('/image', async (req, res) => {
 
     userText += `Return your answer as raw JSON (no code fences), with keys: "markdown", "isFirstPage", optional "description", optional "tags".\n`;
 
-    // Construct user message as an array of text + possibly preceding + current images
+    // Construct user message
     const userContent = [ userText ];
     if (preceding_image_url) {
       userContent.push(new ImageAttachment(preceding_image_url));
@@ -197,7 +185,7 @@ router.post('/image', async (req, res) => {
     const modelName = model || 'llama-vision-mini';
     const chatModel = fetchChatModel(modelName);
 
-    // 5. Call `extendTranscript`
+    // 5. Call extendTranscript
     const suffix = await chatModel.extendTranscript(transcript);
 
     // 6. Extract final assistant message
@@ -207,7 +195,6 @@ router.post('/image', async (req, res) => {
       return res.json({ markdown: '(No assistant output returned.)', isFirstPage: false });
     }
 
-    // 7. Combine all text from assistantMsg
     let textOutput = '';
     if (Array.isArray(assistantMsg.content)) {
       for (const item of assistantMsg.content) {
@@ -220,11 +207,8 @@ router.post('/image', async (req, res) => {
     } else {
       textOutput = assistantMsg.content || '';
     }
-
-    // Strip out code fences
     textOutput = stripJsonCodeFence(textOutput);
 
-    // 8. Attempt to parse as JSON
     let parsed = { markdown: '', isFirstPage: false };
     try {
       parsed = JSON.parse(textOutput);
@@ -235,27 +219,22 @@ router.post('/image', async (req, res) => {
       if (typeof parsed.isFirstPage !== 'boolean') {
         parsed.isFirstPage = false;
       }
-      // "description" and "tags" are optional in the parsed object
     } catch (err) {
       console.warn("Failed to parse JSON from assistant. Using fallback.");
       parsed.markdown = textOutput;
       parsed.isFirstPage = false;
     }
 
-    // 9. Build final response
     const responsePayload = {
       markdown: parsed.markdown,
       isFirstPage: parsed.isFirstPage
     };
 
-    // If describe=true, include "description" if present
     if (describe) {
       responsePayload.description = (typeof parsed.description === 'string')
         ? parsed.description
         : '';
     }
-
-    // If we have a "tags" array from the model, pass it through
     if (Array.isArray(parsed.tags)) {
       responsePayload.tags = parsed.tags;
     }
@@ -302,15 +281,24 @@ router.post('/file', upload.single('file'), async (req, res) => {
     } else if (ext === '.docx') {
       const result = await mammoth.extractRawText({ path: file.path });
       markdownContent = result.value;
-    } else {
-      // For all other text or code files
+    } 
+    // [ADDED for .doc.json support]
+    else if (ext === '.json' && file.originalname.endsWith('.doc.json')) {
+      // If the filename ends with ".doc.json", assume it's a JSON Document Object
+      const fileData = await fs.promises.readFile(file.path, 'utf8');
+      const docObj = JSON.parse(fileData);
+      const doc = new JSONDocument(docObj);
+      markdownContent = doc.getResolvedContent();
+    }
+    // For everything else text-like
+    else {
       const fileContent = await fs.promises.readFile(file.path, 'utf8');
       markdownContent = fileContent;
     }
 
     // Clean up uploaded file
     fs.unlink(file.path, (err) => {
-      if (err) console.error(`Failed to delete upload temp file: ${file.path}`, err);
+      if (err) console.error(`Failed to delete temp upload file: ${file.path}`, err);
     });
 
     res.json({ markdownContent });
@@ -321,3 +309,4 @@ router.post('/file', upload.single('file'), async (req, res) => {
 });
 
 export default router;
+

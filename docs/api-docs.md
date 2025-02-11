@@ -87,9 +87,25 @@ POST /chat/extend_transcript
         "properties": { "query": { "type": "string" } }
       }
     }
-  ]
+  ],
+  "options": {
+    "stream": false,
+    "response_format": { "type": "json_object" }
+  }
 }
 ```
+
+- **`model`** (string, required): The model ID to use.  
+- **`system`** (string, optional): The system or developer instructions.  
+- **`temperature`** (number, optional): Sampling temperature.  
+- **`transcript`** (object, required): The partial transcript so far.  
+- **`tools`** (array, optional): Additional ephemeral tools to register.  
+- **`options`** (object, optional):  
+  - **`stream`** (boolean, optional): If `true`, the server may return partial chunks.  
+  - **`response_format`** (object, optional): If supported, requests the model output in a specific format (e.g., JSON mode or structured JSON schema).  
+    - *Note:* Some models (e.g. certain Anthropic or older local models) may **ignore** `response_format` and emit a warning if they do not support it.
+
+> **Important:** Historically, you could pass `stream` as a top-level boolean. It remains supported for backward compatibility, but it is now recommended to pass both `stream` and `response_format` inside the `options` object.  
 
 #### Response (example)
 
@@ -164,7 +180,7 @@ POST /conversion/image
 
 ---
 
-### 4. Convert File to Markdown 
+### 4. Convert File to Markdown
 
 ```
 POST /conversion/file
@@ -276,7 +292,7 @@ GET /conversions/documents/{jobId}/result
 ```
 - If `pending`/`processing`, returns **202** + partial status.
 - If `error`, returns **500** + an error message.
-- If `complete`, returns the final [Document Object](#document-object-specification).  
+- If `complete`, returns the final [Document Object](#document-object-specification).
 
 **Example** final doc object:
 ```json5
@@ -552,7 +568,7 @@ The response typically:
 
 ## Transcript JSON Structure
 
-Endpoints like `/chat/extend_transcript` expect or return a **Transcript JSON** format. 
+Endpoints like `/chat/extend_transcript` expect or return a **Transcript JSON** format.
 
 ### Overview
 
@@ -628,3 +644,4 @@ Many Charmonizer endpoints (like `/conversions/documents`, `/summaries`, `/embed
   }
 }
 ```
+

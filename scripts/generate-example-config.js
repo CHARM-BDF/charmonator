@@ -17,7 +17,7 @@ const defaultConfig = {
 
   "server": {
     "port": 5002,
-    "baseUrl": "/ai2",
+    "baseUrl": "/charm",
     "charmonator": {
       "apiPath": "api/charmonator",
       "apiVersion": "v1"
