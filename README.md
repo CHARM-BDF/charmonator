@@ -98,6 +98,17 @@ Future versions will support:
 A design goal for charmonizer is to abstract over underlying limits of individual language models, such as context length limits.
 
 
+## Web app playgrounds
+
+There are two web app playgrounds to test demonstrate these APIs:
+
+ - `public/index.html` - A general-purpose chat app
+ - `public/document.html` - A document playground (currently supports conversion from PDF)
+
+These are available when you start the server and navigate to (`http://localhost:5002/charm/`)[http://localhost:5002/charm/], assuming you have /charm/ as the base path prefix and 5002 as the port in you configuration.
+
+
+
 <a name="configuration-management"></a>
 ## Configuration management
 
