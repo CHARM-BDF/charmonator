@@ -16,6 +16,11 @@
     referrerpolicy="no-referrer"
   />
 
+  <!-- Include Marked.js for Markdown rendering in JS playground output -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Include DOMPurify for sanitization -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.0/purify.min.js"></script>
+
   <style>
     /* Container for the entire page */
     .page-container {
@@ -301,22 +306,58 @@
     <div class="progress-box" id="summaryProgressBox" style="display:none;">
       <div id="summaryProgressStatus"></div>
     </div>
-
   </div>
+
+  <!-- NEW: JavaScript Playground container -->
+  <div class="result-container" id="jsPlaygroundContainer" style="display:none;">
+    <h2>JavaScript Playground</h2>
+    <p style="font-size: 14px; color: #333;">
+      This lets you run custom JavaScript against the loaded <code>docObj</code>. Your function should return a 
+      string of <strong>Markdown</strong> to display below.
+    </p>
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+      <label for="jsSnippetSelect" style="font-weight:bold;">Templates:</label>
+      <select id="jsSnippetSelect">
+        <option value="">(Select a template)</option>
+        <option value="extractSummary">Extract High-Level Summary</option>
+        <option value="extractChunkSummaries">Extract Summaries from All Chunks</option>
+      </select>
+      <button class="convert-button" id="loadTemplateBtn">Load Template</button>
+    </div>
+    <textarea 
+      id="userCodeArea" 
+      style="width:100%; height:200px; font-family:monospace; font-size:14px; border:1px solid #ccc; border-radius:4px;"
+    ></textarea>
+    <div style="margin-top:10px; text-align:center;">
+      <button class="convert-button" id="runJsBtn">Run Code</button>
+    </div>
+    <h3>Output:</h3>
+    <div 
+      id="jsPlaygroundOutput" 
+      style="min-height:150px; border:1px solid #ccc; border-radius:4px; padding:10px; background-color:#fafafa; margin-top:10px;"
+    ></div>
+  </div>
+
 </div> <!-- .page-container -->
 
 <script>
   (function(){
-    // Base endpoint constants
+    // ---------------------- Constants & DOM Elements ----------------------
     const CONVERSION_BASE = 'api/charmonizer/v1';
     const MODELS_ENDPOINT = 'api/charmonator/v1/models';
     const SUMMARIES_BASE = 'api/charmonizer/v1/summaries';
 
-    // DOM references
+    // File input for PDF
     const fileInput = document.getElementById('fileInput');
     const dropArea = document.getElementById('dropArea');
     const fileAttachedIndicator = document.getElementById('fileAttachedIndicator');
 
+    // .doc.json
+    const docJsonFileInput = document.getElementById('docJsonFileInput');
+    const docJsonDropArea = document.getElementById('docJsonDropArea');
+    const docJsonAttachedIndicator = document.getElementById('docJsonAttachedIndicator');
+
+    // Conversion options
     const modelSelect = document.getElementById('modelSelect');
     const ocrThresholdInput = document.getElementById('ocrThresholdInput');
     const pageNumberingSelect = document.getElementById('pageNumberingSelect');
@@ -329,22 +370,18 @@
     const convertBtn = document.getElementById('convertBtn');
     const progressBox = document.getElementById('progressBox');
     const progressStatus = document.getElementById('progressStatus');
+
+    // Results
     const resultContainer = document.getElementById('resultContainer');
     const jsonOutput = document.getElementById('jsonOutput');
     const copyJsonBtn = document.getElementById('copyJsonBtn');
     const copyMarkdownBtn = document.getElementById('copyMarkdownBtn');
 
-    // For .doc.json
-    const docJsonFileInput = document.getElementById('docJsonFileInput');
-    const docJsonDropArea = document.getElementById('docJsonDropArea');
-    const docJsonAttachedIndicator = document.getElementById('docJsonAttachedIndicator');
-
-    // Summaries UI
+    // Summaries
     const summariesContainer = document.getElementById('summariesContainer');
-    const summarizeBtn = document.getElementById('summarizeBtn');
     const summaryProgressBox = document.getElementById('summaryProgressBox');
     const summaryProgressStatus = document.getElementById('summaryProgressStatus');
-
+    const summarizeBtn = document.getElementById('summarizeBtn');
     const summaryMethodSelect = document.getElementById('summaryMethodSelect');
     const chunkGroupInput = document.getElementById('chunkGroupInput');
     const contextBeforeInput = document.getElementById('contextBeforeInput');
@@ -355,13 +392,20 @@
     const deltaFoldMergeModeSelect = document.getElementById('deltaFoldMergeModeSelect');
     const initialSummaryInput = document.getElementById('initialSummaryInput');
 
-    let uploadedFile = null;    // for PDF
-    let docJsonFile = null;     // for .doc.json
-    let loadedDoc = null;       // store the final loaded doc object
+    // JavaScript Playground
+    const jsPlaygroundContainer = document.getElementById('jsPlaygroundContainer');
+    const jsSnippetSelect = document.getElementById('jsSnippetSelect');
+    const loadTemplateBtn = document.getElementById('loadTemplateBtn');
+    const userCodeArea = document.getElementById('userCodeArea');
+    const runJsBtn = document.getElementById('runJsBtn');
+    const jsPlaygroundOutput = document.getElementById('jsPlaygroundOutput');
 
-    console.log("[document.html] Script loaded.");
+    // State
+    let uploadedFile = null;  // PDF
+    let docJsonFile = null;   // .doc.json
+    let loadedDoc = null;     // The actual JSON doc object in memory
 
-    // ---------------------- Load Models into Drop-down ----------------------
+    // ---------------------- Load models ----------------------
     async function loadModels() {
       try {
         const response = await fetch(MODELS_ENDPOINT);
@@ -369,7 +413,6 @@
           throw new Error('Failed to fetch models');
         }
         const data = await response.json();
-        // Clear any existing options
         modelSelect.innerHTML = '';
         summaryModelSelect.innerHTML = '<option value="">Use same model as above</option>';
 
@@ -380,44 +423,39 @@
           option.title = model.description;
           modelSelect.appendChild(option);
 
-          // also add to summaryModelSelect
-          const smOption = document.createElement('option');
-          smOption.value = model.id;
-          smOption.textContent = model.name;
-          smOption.title = model.description;
-          summaryModelSelect.appendChild(smOption);
+          // summary
+          const smOpt = document.createElement('option');
+          smOpt.value = model.id;
+          smOpt.textContent = model.name;
+          smOpt.title = model.description;
+          summaryModelSelect.appendChild(smOpt);
         });
       } catch (err) {
-        console.error("[doc.html] Error loading models:", err);
+        console.error('Error loading models:', err);
         modelSelect.innerHTML = '<option value="">Error loading models</option>';
         summaryModelSelect.innerHTML = '<option value="">Error loading models</option>';
       }
     }
     loadModels();
 
-
-    // ---------------------- PDF Drag & Drop Setup ----------------------
-    ['dragenter', 'dragover'].forEach(eventName => {
-      dropArea.addEventListener(eventName, (e) => {
+    // ---------------------- PDF Drag & Drop ----------------------
+    ;['dragenter', 'dragover'].forEach(ev => {
+      dropArea.addEventListener(ev, e => {
         e.preventDefault();
         e.stopPropagation();
         dropArea.classList.add('dragover');
       });
     });
-    ['dragleave', 'drop'].forEach(eventName => {
-      dropArea.addEventListener(eventName, (e) => {
+    ;['dragleave', 'drop'].forEach(ev => {
+      dropArea.addEventListener(ev, e => {
         e.preventDefault();
         e.stopPropagation();
         dropArea.classList.remove('dragover');
       });
     });
-    dropArea.addEventListener('drop', (e) => {
-      if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) {
-        return;
-      }
+    dropArea.addEventListener('drop', e => {
+      if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
       const file = e.dataTransfer.files[0];
-      if (!file) return;
-      // We only handle .pdf here
       if (!file.name.toLowerCase().endsWith('.pdf')) {
         alert('Please drop a .pdf file here');
         return;
@@ -426,8 +464,7 @@
       uploadedFile = file;
       fileAttachedIndicator.textContent = `File attached: ${file.name} (${file.size} bytes)`;
     });
-
-    // ---------------------- PDF File Input (click-based) ----------------------
+    // PDF file input
     fileInput.addEventListener('change', () => {
       if (fileInput.files && fileInput.files[0]) {
         const f = fileInput.files[0];
@@ -443,26 +480,24 @@
       }
     });
 
-
-    // ---------------------- .doc.json drag & drop ----------------------
-    ['dragenter', 'dragover'].forEach(eventName => {
-      docJsonDropArea.addEventListener(eventName, (e) => {
+    // ---------------------- doc.json Drag & Drop ----------------------
+    ;['dragenter', 'dragover'].forEach(ev => {
+      docJsonDropArea.addEventListener(ev, e => {
         e.preventDefault();
         e.stopPropagation();
         docJsonDropArea.classList.add('dragover');
       });
     });
-    ['dragleave', 'drop'].forEach(eventName => {
-      docJsonDropArea.addEventListener(eventName, (e) => {
+    ;['dragleave', 'drop'].forEach(ev => {
+      docJsonDropArea.addEventListener(ev, e => {
         e.preventDefault();
         e.stopPropagation();
         docJsonDropArea.classList.remove('dragover');
       });
     });
-    docJsonDropArea.addEventListener('drop', (e) => {
+    docJsonDropArea.addEventListener('drop', e => {
       if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
       const file = e.dataTransfer.files[0];
-      if (!file) return;
       if (!file.name.toLowerCase().endsWith('.doc.json')) {
         alert('Please drop a file ending with .doc.json');
         return;
@@ -472,7 +507,7 @@
       docJsonAttachedIndicator.textContent = `Doc JSON: ${file.name} (${file.size} bytes)`;
       loadDocJsonFile(file);
     });
-
+    // docJson file input
     docJsonFileInput.addEventListener('change', () => {
       if (docJsonFileInput.files && docJsonFileInput.files[0]) {
         const f = docJsonFileInput.files[0];
@@ -488,7 +523,6 @@
         docJsonAttachedIndicator.textContent = 'No .doc.json loaded.';
       }
     });
-
     async function loadDocJsonFile(file) {
       try {
         const text = await file.text();
@@ -497,28 +531,28 @@
         // Show in #resultContainer
         resultContainer.style.display = 'block';
         jsonOutput.textContent = JSON.stringify(loadedDoc, null, 2);
-        // Show the Summaries UI
+        // Summaries UI
         summariesContainer.style.display = 'block';
         summaryProgressBox.style.display = 'none';
+        // JS Playground
+        jsPlaygroundContainer.style.display = 'block';
       } catch (err) {
-        console.error('Error loading doc.json:', err);
         alert('Failed to parse that .doc.json file as valid JSON.');
+        console.error('Error loading doc.json:', err);
       }
     }
 
-
-    // ---------------------- Convert Button (PDF -> doc) ----------------------
+    // ---------------------- Convert PDF -> doc ----------------------
     convertBtn.addEventListener('click', async () => {
       if (!uploadedFile) {
-        alert('Please select or drop a PDF file first (or load a .doc.json below).');
+        alert('Please select or drop a PDF first (or load a .doc.json).');
         return;
       }
       // Hide old results
       resultContainer.style.display = 'none';
       jsonOutput.textContent = '';
-      loadedDoc = null; // clear previous doc
+      loadedDoc = null;
 
-      // Build form data
       const formData = new FormData();
       formData.append('file', uploadedFile);
       formData.append('model', modelSelect.value);
@@ -550,7 +584,7 @@
         });
         const data = await response.json();
         if (!response.ok) {
-          progressStatus.textContent = `Error: ${data.error || 'Failed to start conversion job.'}`;
+          progressStatus.textContent = `Error: ${data.error || 'Failed to start job.'}`;
           return;
         }
         const jobId = data.job_id;
@@ -580,14 +614,14 @@
           } else if (status === 'processing') {
             progressStatus.textContent = `Status: processing... ${pages_converted} / ${pages_total} pages.`;
           } else if (status === 'complete') {
-            progressStatus.textContent = `Status: complete. Retrieving final document...`;
+            progressStatus.textContent = `Status: complete. Retrieving final doc...`;
             keepPolling = false;
             await retrieveDocResult(jobId);
           } else if (status === 'error') {
             progressStatus.textContent = `Error: ${error}\nConverted: ${pages_converted}/${pages_total}`;
             keepPolling = false;
           } else {
-            progressStatus.textContent = `Status: ${status}. (Unrecognized)`;
+            progressStatus.textContent = `Unrecognized status: ${status}`;
             keepPolling = false;
           }
         } catch (err) {
@@ -596,18 +630,17 @@
         }
       }
     }
-
     async function retrieveDocResult(jobId) {
       try {
         const res = await fetch(`${CONVERSION_BASE}/conversions/documents/${jobId}/result`);
         if (res.status === 202) {
-          progressStatus.textContent = `Still processing (202). Will poll again...`;
+          progressStatus.textContent = `202: Still processing, will poll again...`;
           pollJobStatus(jobId);
           return;
         }
         if (!res.ok) {
           const errData = await res.json();
-          progressStatus.textContent = `Error retrieving final doc: ${errData.error}`;
+          progressStatus.textContent = `Error retrieving doc: ${errData.error}`;
           return;
         }
         const docObj = await res.json();
@@ -616,34 +649,35 @@
         resultContainer.style.display = 'block';
         jsonOutput.textContent = JSON.stringify(docObj, null, 2);
 
-        // Summaries are now available
+        // Summaries
         summariesContainer.style.display = 'block';
         summaryProgressBox.style.display = 'none';
 
+        // JS Playground
+        jsPlaygroundContainer.style.display = 'block';
+
         copyJsonBtn.onclick = () => {
           navigator.clipboard.writeText(JSON.stringify(docObj, null, 2))
-            .then(() => { alert('JSON copied to clipboard!'); })
-            .catch(e => console.error('Copy JSON error', e));
+            .then(() => alert('JSON copied!'))
+            .catch(e => console.error(e));
         };
         copyMarkdownBtn.onclick = () => {
           const fullMd = docObj.content || '(No docObj.content found)';
           navigator.clipboard.writeText(fullMd)
-            .then(() => { alert('Markdown content copied to clipboard!'); })
-            .catch(e => console.error('Copy MD error', e));
+            .then(() => alert('Markdown copied!'))
+            .catch(e => console.error(e));
         };
       } catch (err) {
         progressStatus.textContent = `Error retrieving final doc: ${err.message}`;
       }
     }
 
-
-    // ---------------- Summarization Flow ----------------
+    // ---------------- Summaries Flow ----------------
     summarizeBtn.addEventListener('click', async () => {
       if (!loadedDoc) {
-        alert('No document is loaded. Convert a PDF first or load a .doc.json file.');
+        alert('No doc object is loaded. Convert a PDF or load a .doc.json first.');
         return;
       }
-      // Hide old progress
       summaryProgressBox.style.display = 'block';
       summaryProgressStatus.textContent = 'Starting summarization...';
 
@@ -662,7 +696,7 @@
         }
       }
       const sumModel = summaryModelSelect.value.trim() || modelSelect.value;
-      const temperature = 0.7; // fixed or you can add an input
+      const temperature = 0.7;
       const json_sum = deltaFoldMergeModeSelect.value.trim();
       let initial_summary = null;
       const initSumRaw = initialSummaryInput.value.trim();
@@ -670,11 +704,10 @@
         try {
           initial_summary = JSON.parse(initSumRaw);
         } catch {
-          initial_summary = initSumRaw; // if not JSON parseable
+          initial_summary = initSumRaw; // fallback if not valid JSON
         }
       }
 
-      // Build payload
       const body = {
         document: loadedDoc,
         model: sumModel,
@@ -692,12 +725,12 @@
       try {
         const startRes = await fetch(`${SUMMARIES_BASE}`, {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type':'application/json'},
           body: JSON.stringify(body)
         });
         const startData = await startRes.json();
         if (!startRes.ok) {
-          summaryProgressStatus.textContent = `Error: ${startData.error || 'Failed to start summarization'}`;
+          summaryProgressStatus.textContent = `Error: ${startData.error || 'Start summarization failed'}`;
           return;
         }
         const jobId = startData.job_id;
@@ -707,7 +740,6 @@
         summaryProgressStatus.textContent = `Error starting summarization: ${err.message}`;
       }
     });
-
     async function pollSummariesJob(jobId) {
       let keepPolling = true;
       while (keepPolling) {
@@ -715,7 +747,7 @@
         try {
           const stRes = await fetch(`${SUMMARIES_BASE}/${jobId}`);
           if (stRes.status === 404) {
-            summaryProgressStatus.textContent = `Job not found.`;
+            summaryProgressStatus.textContent = 'Summaries job not found.';
             return;
           }
           const stData = await stRes.json();
@@ -726,7 +758,7 @@
             summaryProgressStatus.textContent = `Summaries job error: ${error}`;
             keepPolling = false;
           } else if (status === 'complete') {
-            summaryProgressStatus.textContent = `Summaries complete. Fetching result.`;
+            summaryProgressStatus.textContent = 'Summaries complete. Fetching result.';
             keepPolling = false;
             fetchSummariesResult(jobId);
           } else {
@@ -739,35 +771,121 @@
         }
       }
     }
-
     async function fetchSummariesResult(jobId) {
       try {
         const res = await fetch(`${SUMMARIES_BASE}/${jobId}/result`);
         if (res.status === 202) {
-          summaryProgressStatus.textContent = `Still processing... will poll again.`;
+          summaryProgressStatus.textContent = 'Still processing... will poll again.';
           pollSummariesJob(jobId);
           return;
         }
         if (res.status === 500) {
           const errData = await res.json();
-          summaryProgressStatus.textContent = `Error in summarization: ${errData.error}`;
+          summaryProgressStatus.textContent = `Summaries error: ${errData.error}`;
           return;
         }
         if (!res.ok) {
           const eText = await res.text();
-          summaryProgressStatus.textContent = `Error: HTTP ${res.status} - ${eText}`;
+          summaryProgressStatus.textContent = `HTTP ${res.status} - ${eText}`;
           return;
         }
         const finalDoc = await res.json();
-        loadedDoc = finalDoc; // store updated doc
-
-        summaryProgressStatus.textContent = 'Summaries done. Updated doc loaded.';
-        // Show updated doc in #jsonOutput
+        loadedDoc = finalDoc;
+        summaryProgressStatus.textContent = 'Summaries done. Document updated.';
         jsonOutput.textContent = JSON.stringify(loadedDoc, null, 2);
       } catch (err) {
         summaryProgressStatus.textContent = `Error fetching summary result: ${err.message}`;
       }
     }
+
+
+    // ---------------- JavaScript Playground ----------------
+    // We'll define some code templates:
+    const codeTemplates = {
+      extractSummary: `function run(docObj) {
+  // docObj is the JSON Document object
+  // We'll just return the top-level summary as Markdown
+  const summary = docObj.annotations?.summary;
+  if (!summary) {
+    return "No top-level summary found.";
+  }
+  // If it's structured, you may want to do something else,
+  // but let's just convert it to a string
+  const text = (typeof summary === 'string')
+    ? summary
+    : JSON.stringify(summary, null, 2);
+
+  return "## High-level summary\\n\\n" + text;
+}
+`,
+      extractChunkSummaries: `function run(docObj) {
+  // We'll gather summaries from each page in docObj.chunks.pages
+  if (!docObj.chunks?.pages) {
+    return "No pages found in docObj.chunks.pages.";
+  }
+  let output = "# Summaries from all chunks\\n\\n";
+  docObj.chunks.pages.forEach((page, idx) => {
+    const sum = page.annotations?.summary;
+    if (!sum) {
+      output += "### Page " + (idx+1) + ": No summary found\\n\\n";
+    } else {
+      // If sum is an object, convert to string
+      const sumText = (typeof sum === 'string')
+        ? sum
+        : JSON.stringify(sum, null, 2);
+      output += "### Page " + (idx+1) + " Summary\\n\\n" + sumText + "\\n\\n";
+    }
+  });
+  return output;
+}
+`
+    };
+
+    loadTemplateBtn.addEventListener('click', () => {
+      const choice = jsSnippetSelect.value;
+      if (!choice || !codeTemplates[choice]) {
+        alert('Please select a valid template.');
+        return;
+      }
+      userCodeArea.value = codeTemplates[choice];
+    });
+
+    runJsBtn.addEventListener('click', () => {
+      if (!loadedDoc) {
+        alert('No doc is loaded to run code against. Please load or convert a doc first.');
+        return;
+      }
+      const userJs = userCodeArea.value;
+      jsPlaygroundOutput.innerHTML = '<em>Running...</em>';
+
+      // We'll create a function from the user code
+      // and pass in the loadedDoc as docObj
+      let runFn;
+      try {
+        runFn = new Function('docObj', userJs + '\n\nreturn run(docObj);');
+      } catch (err) {
+        jsPlaygroundOutput.innerHTML = `<span style="color:red;">Error creating function: ${err.message}</span>`;
+        return;
+      }
+
+      let result;
+      try {
+        result = runFn(loadedDoc);
+      } catch (err) {
+        jsPlaygroundOutput.innerHTML = `<span style="color:red;">Runtime error: ${err.message}</span>`;
+        return;
+      }
+
+      // result should be a string of markdown
+      if (typeof result !== 'string') {
+        jsPlaygroundOutput.innerHTML = `<span style="color:red;">Your run() did not return a string. Instead got type: ${typeof result}</span>`;
+        return;
+      }
+
+      // Render as markdown
+      const sanitizedMd = DOMPurify.sanitize(marked.parse(result));
+      jsPlaygroundOutput.innerHTML = sanitizedMd;
+    });
 
   })();
 </script>
