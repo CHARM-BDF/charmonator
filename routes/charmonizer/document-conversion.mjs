@@ -130,7 +130,7 @@ router.post('/documents', upload.single('file'), async (req, res) => {
   try {
     const {
       ocr_threshold = 0.7,
-      model = 'gpt-4o-mini',
+      model = null,
       page_numbering = 'true',
       description,
       intent,
@@ -139,6 +139,10 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       describe: describeParam = 'true',
       tags: tagsParam
     } = req.body;
+
+    if (!model) {
+      return res.status(400).json({ error: 'model is required' });
+    }
 
     // Convert "describe" from string to boolean:
     const describe = (String(describeParam).toLowerCase() === 'true');
