@@ -45,6 +45,14 @@ node server.js
 The server will start on the port specified in the config file, and you can begin making requests to the API endpoints in [docs/api-docs.md](./docs/api-docs.md).
 
 
+### Dependencies
+
+If you are getting errors, you may need to install GraphicsMagick to use endpoints that rely on image processing:
+
+```bash
+brew install graphicsmagick
+```
+
 
 
 <a name="what-is-charmonator"></a>
@@ -105,6 +113,7 @@ It also specifies named model descriptions, so that a named model can have model
    + system / developer messages
    + temperature 
    + reasoning effort
+
 
 
 ## Endpoints
