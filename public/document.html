@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Document Conversion Playground</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Link to your main CSS file -->
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Font Awesome for icons (optional) -->
+  <link 
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  />
+
+  <style>
+    /* Additional minimal styles for layout in a "playground" format */
+    .page-container {
+      display: flex;
+      flex-direction: column;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 10px;
+    }
+    .header {
+      margin-bottom: 20px;
+    }
+    .options-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      border: 1px solid #eee;
+      padding: 20px;
+      border-radius: 10px;
+    }
+    .option-item {
+      display: flex;
+      flex-direction: column;
+      width: 220px;
+    }
+    .option-item label {
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+    .option-item input,
+    .option-item select,
+    .option-item textarea {
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .option-item textarea {
+      resize: vertical;
+    }
+    .convert-button-container {
+      margin-top: 20px;
+      text-align: center;
+    }
+    .convert-button {
+      padding: 10px 25px;
+      font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background-color: #d0f0c0;
+    }
+    .convert-button:hover {
+      background-color: #b0e0a0;
+    }
+    .progress-box {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #eaeaea;
+      border-radius: 8px;
+      background-color: #f9f9f9;
+    }
+    .result-container {
+      margin-top: 20px;
+      display: none; /* hidden by default */
+    }
+    .json-result {
+      width: 100%;
+      height: 300px;
+      overflow: auto;
+      background-color: #fafafa;
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 4px;
+      white-space: pre;
+      font-family: monospace;
+    }
+    .result-buttons {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+    }
+    /* Indicator for attached file */
+    #fileAttachedIndicator {
+      margin-top: 5px;
+      font-size: 14px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page-container">
+  <h1 class="header">Document Conversion Playground</h1>
+
+  <!-- Options and File Upload Form -->
+  <div class="options-form">
+    <!-- Model drop-down -->
+    <div class="option-item">
+      <label for="modelSelect">Model</label>
+      <select id="modelSelect">
+        <option value="">Loading models...</option>
+      </select>
+    </div>
+
+    <div class="option-item">
+      <label for="ocrThresholdInput">OCR Threshold</label>
+      <!-- Default changed to 1.0 -->
+      <input type="number" id="ocrThresholdInput" min="0" max="1" step="0.05" value="1.0">
+    </div>
+
+    <div class="option-item">
+      <label for="pageNumberingSelect">Page Numbering</label>
+      <select id="pageNumberingSelect">
+        <option value="true" selected>Enable</option>
+        <option value="false">Disable</option>
+      </select>
+    </div>
+
+    <div class="option-item">
+      <label for="detectBoundariesSelect">Detect Boundaries</label>
+      <select id="detectBoundariesSelect">
+        <option value="false" selected>No</option>
+        <option value="true">Yes</option>
+      </select>
+    </div>
+
+    <div class="option-item">
+      <label for="describeSelect">Summaries (describe)</label>
+      <select id="describeSelect">
+        <option value="true" selected>Yes</option>
+        <option value="false">No</option>
+      </select>
+    </div>
+
+    <!-- Tags field -->
+    <div class="option-item">
+      <label for="tagsInput">Tags (JSON)</label>
+      <textarea id="tagsInput" rows="3" placeholder='{"signature":"Signed by","footnote":"Footnote"}'></textarea>
+    </div>
+
+    <div class="option-item">
+      <label for="descriptionInput">Page Description</label>
+      <textarea id="descriptionInput" rows="3" placeholder="High-level doc description"></textarea>
+    </div>
+
+    <div class="option-item">
+      <label for="intentInput">Intent</label>
+      <textarea id="intentInput" rows="3" placeholder="What do you plan to do with the doc?"></textarea>
+    </div>
+
+    <div class="option-item">
+      <label for="graphicInstructionsInput">Graphic Inst.</label>
+      <textarea id="graphicInstructionsInput" rows="3" placeholder="Extra instructions for charts/figures"></textarea>
+    </div>
+
+    <!-- File Upload Area -->
+    <div style="width: 100%; margin-top:10px;">
+      <label style="font-weight:600; display:block; margin-bottom:5px;">File to convert</label>
+      <div id="dropArea" class="drop-area">
+        <label for="fileInput" id="fileInputLabel">Attach PDF</label>
+        <input type="file" id="fileInput" accept=".pdf" />
+      </div>
+      <!-- Visible attached file indicator -->
+      <p id="fileAttachedIndicator">No file attached yet.</p>
+    </div>
+  </div> <!-- .options-form -->
+
+  <div class="convert-button-container">
+    <button class="convert-button" id="convertBtn">Convert Document</button>
+  </div>
+
+  <div class="progress-box" id="progressBox" style="display: none;">
+    <div id="progressStatus"></div>
+  </div>
+
+  <!-- Final Result Display -->
+  <div class="result-container" id="resultContainer">
+    <h2>Conversion Result (JSON Document Object)</h2>
+    <div class="json-result" id="jsonOutput"></div>
+    <div class="result-buttons">
+      <button id="copyJsonBtn"><i class="fa fa-copy"></i> Copy JSON</button>
+      <button id="copyMarkdownBtn"><i class="fa fa-copy"></i> Copy as Markdown</button>
+    </div>
+  </div>
+</div> <!-- .page-container -->
+
+<script>
+(function(){
+  // Define base URLs:
+  // For conversion endpoints we use charmonizer; for models, charmonator.
+  const CONVERSION_BASE = './api/charmonizer/v1';
+  const MODELS_ENDPOINT = './api/charmonator/v1/models';
+
+  const fileInput = document.getElementById('fileInput');
+  const dropArea = document.getElementById('dropArea');
+  const fileAttachedIndicator = document.getElementById('fileAttachedIndicator');
+
+  const modelSelect = document.getElementById('modelSelect');
+  const ocrThresholdInput = document.getElementById('ocrThresholdInput');
+  const pageNumberingSelect = document.getElementById('pageNumberingSelect');
+  const detectBoundariesSelect = document.getElementById('detectBoundariesSelect');
+  const describeSelect = document.getElementById('describeSelect');
+  const tagsInput = document.getElementById('tagsInput');
+  const descriptionInput = document.getElementById('descriptionInput');
+  const intentInput = document.getElementById('intentInput');
+  const graphicInstructionsInput = document.getElementById('graphicInstructionsInput');
+
+  const convertBtn = document.getElementById('convertBtn');
+  const progressBox = document.getElementById('progressBox');
+  const progressStatus = document.getElementById('progressStatus');
+
+  const resultContainer = document.getElementById('resultContainer');
+  const jsonOutput = document.getElementById('jsonOutput');
+  const copyJsonBtn = document.getElementById('copyJsonBtn');
+  const copyMarkdownBtn = document.getElementById('copyMarkdownBtn');
+
+  let uploadedFile = null;
+
+  console.log("[doc.html] Script loaded.");
+
+  // ------------ Populate the Models Drop-down ------------
+  async function loadModels() {
+    console.log("[doc.html] Loading models from", MODELS_ENDPOINT);
+    try {
+      const response = await fetch(MODELS_ENDPOINT);
+      if (!response.ok) {
+        throw new Error('Failed to fetch models');
+      }
+      const data = await response.json();
+      console.log("[doc.html] Models fetched:", data.models);
+      modelSelect.innerHTML = '';
+      data.models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = model.name;
+        option.title = model.description;
+        modelSelect.appendChild(option);
+      });
+    } catch (err) {
+      console.error("[doc.html] Error loading models:", err);
+      modelSelect.innerHTML = '<option value="">Error loading models</option>';
+    }
+  }
+  loadModels();
+
+  // ------------ Drag & Drop Event Listeners ------------
+  ['dragenter','dragover'].forEach(eventName => {
+    dropArea.addEventListener(eventName, (e) => {
+      console.log(`[doc.html] dropArea event '${eventName}' triggered.`);
+      e.preventDefault();
+      e.stopPropagation();
+      dropArea.classList.add('dragover');
+    });
+  });
+  ['dragleave','drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, (e) => {
+      console.log(`[doc.html] dropArea event '${eventName}' triggered.`);
+      e.preventDefault();
+      e.stopPropagation();
+      dropArea.classList.remove('dragover');
+    });
+  });
+  dropArea.addEventListener('drop', (e) => {
+    console.log("[doc.html] File(s) dropped.");
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) {
+      console.log("[doc.html] No files found in drop.");
+      return;
+    }
+    const file = e.dataTransfer.files[0];
+    if (!file) {
+      console.log("[doc.html] The file was empty or not recognized.");
+      return;
+    }
+    console.log("[doc.html] Setting uploadedFile to:", file.name, file.size, file.type);
+    fileInput.files = e.dataTransfer.files;
+    uploadedFile = file;
+    fileAttachedIndicator.textContent = `File attached: ${file.name} (${file.size} bytes)`;
+  });
+
+  // ------------ File Input (click-based) ------------
+  fileInput.addEventListener('change', () => {
+    console.log("[doc.html] fileInput changed.");
+    if (fileInput.files && fileInput.files[0]) {
+      uploadedFile = fileInput.files[0];
+      console.log("[doc.html] Selected file =>", uploadedFile.name, uploadedFile.type);
+      fileAttachedIndicator.textContent = `File attached: ${uploadedFile.name} (${uploadedFile.size} bytes)`;
+    } else {
+      console.log("[doc.html] No file selected.");
+      fileAttachedIndicator.textContent = 'No file attached yet.';
+    }
+  });
+
+  // ------------ Convert Button ------------
+  convertBtn.addEventListener('click', async () => {
+    console.log("[doc.html] Convert button clicked.");
+
+    if (!uploadedFile) {
+      console.log("[doc.html] No file was selected or dropped. Aborting.");
+      alert('Please select or drop a PDF file first.');
+      return;
+    }
+    console.log("[doc.html] Starting conversion for file:", uploadedFile.name);
+
+    // Hide old results
+    resultContainer.style.display = 'none';
+    jsonOutput.textContent = '';
+
+    // Build form data
+    const formData = new FormData();
+    formData.append('file', uploadedFile);
+    formData.append('model', modelSelect.value);
+    formData.append('ocr_threshold', ocrThresholdInput.value);
+    formData.append('page_numbering', pageNumberingSelect.value);
+    formData.append('detect_document_boundaries', detectBoundariesSelect.value);
+    formData.append('describe', describeSelect.value);
+
+    console.log("[doc.html] Selected model:", modelSelect.value);
+    console.log("[doc.html] OCR threshold:", ocrThresholdInput.value);
+    console.log("[doc.html] Page numbering:", pageNumberingSelect.value);
+    console.log("[doc.html] Detect boundaries:", detectBoundariesSelect.value);
+    console.log("[doc.html] Describe:", describeSelect.value);
+
+    if (tagsInput.value.trim()) {
+      formData.append('tags', tagsInput.value.trim());
+      console.log("[doc.html] Tags:", tagsInput.value.trim());
+    }
+    if (descriptionInput.value.trim()) {
+      formData.append('description', descriptionInput.value.trim());
+      console.log("[doc.html] Description:", descriptionInput.value.trim());
+    }
+    if (intentInput.value.trim()) {
+      formData.append('intent', intentInput.value.trim());
+      console.log("[doc.html] Intent:", intentInput.value.trim());
+    }
+    if (graphicInstructionsInput.value.trim()) {
+      formData.append('graphic_instructions', graphicInstructionsInput.value.trim());
+      console.log("[doc.html] Graphic instructions:", graphicInstructionsInput.value.trim());
+    }
+
+    progressBox.style.display = 'block';
+    progressStatus.textContent = 'Starting conversion job...';
+
+    try {
+      console.log(`[doc.html] Sending POST to ${CONVERSION_BASE}/conversions/documents`);
+      const response = await fetch(`${CONVERSION_BASE}/conversions/documents`, {
+        method: 'POST',
+        body: formData
+      });
+      console.log("[doc.html] Received response status:", response.status);
+      const data = await response.json();
+      console.log("[doc.html] JSON response from start call =>", data);
+      if (!response.ok) {
+        console.log("[doc.html] Error: response not OK.", data);
+        throw new Error(data.error || 'Failed to start conversion job.');
+      }
+      const jobId = data.job_id;
+      progressStatus.textContent = `Job started (job_id=${jobId}). Polling for progress...`;
+      pollJobStatus(jobId);
+    } catch (err) {
+      console.error('[doc.html] Error starting conversion job:', err);
+      progressStatus.textContent = `Error: ${err.message}`;
+    }
+  });
+
+  // ------------ Polling ------------
+  async function pollJobStatus(jobId) {
+    console.log(`[doc.html] pollJobStatus(${jobId}) started.`);
+    let keepPolling = true;
+    while (keepPolling) {
+      await new Promise(r => setTimeout(r, 2000)); // 2s delay
+      try {
+        console.log(`[doc.html] Checking status => ${CONVERSION_BASE}/conversions/documents/${jobId}`);
+        const statusRes = await fetch(`${CONVERSION_BASE}/conversions/documents/${jobId}`);
+        console.log("[doc.html] Status response code:", statusRes.status);
+        if (statusRes.status === 404) {
+          console.log("[doc.html] 404: Job not found.");
+          progressStatus.textContent = 'Job not found (404).';
+          keepPolling = false;
+          return;
+        }
+        const statusData = await statusRes.json();
+        console.log("[doc.html] Status data:", statusData);
+        const { status, error, pages_total, pages_converted } = statusData;
+        if (status === 'pending') {
+          progressStatus.textContent = `Status: pending... (pages_total unknown)`;
+        } else if (status === 'processing') {
+          progressStatus.textContent = `Status: processing... ${pages_converted} / ${pages_total} pages done.`;
+        } else if (status === 'complete') {
+          progressStatus.textContent = `Status: complete. Retrieving final document...`;
+          keepPolling = false;
+          await retrieveDocResult(jobId);
+        } else if (status === 'error') {
+          progressStatus.textContent = `Error: ${error}\nConverted: ${pages_converted}/${pages_total}`;
+          keepPolling = false;
+        } else {
+          progressStatus.textContent = `Status: ${status}. (Unrecognized)`;
+          keepPolling = false;
+        }
+      } catch (err) {
+        console.warn('[doc.html] Polling error:', err);
+        progressStatus.textContent = `Polling error: ${err.message || err}`;
+        keepPolling = false;
+      }
+    }
+  }
+
+  async function retrieveDocResult(jobId) {
+    console.log(`[doc.html] Retrieving result => ${CONVERSION_BASE}/conversions/documents/${jobId}/result`);
+    try {
+      const res = await fetch(`${CONVERSION_BASE}/conversions/documents/${jobId}/result`);
+      console.log("[doc.html] Result fetch status:", res.status);
+      if (res.status === 202) {
+        console.log("[doc.html] 202: Still processing, continue polling.");
+        progressStatus.textContent = `Still processing (202). Will poll again...`;
+        pollJobStatus(jobId);
+        return;
+      }
+      if (!res.ok) {
+        const errData = await res.json();
+        console.log("[doc.html] Error fetching final doc:", errData);
+        progressStatus.textContent = `Error retrieving final doc: ${errData.error}`;
+        return;
+      }
+      const docObj = await res.json();
+      console.log("[doc.html] Final document object:", docObj);
+      progressStatus.textContent = 'Conversion complete. Document object is ready.';
+      resultContainer.style.display = 'block';
+      jsonOutput.textContent = JSON.stringify(docObj, null, 2);
+
+      copyJsonBtn.onclick = () => {
+        navigator.clipboard.writeText(JSON.stringify(docObj, null, 2))
+          .then(() => { alert('JSON copied to clipboard!'); })
+          .catch(e => console.error('Copy JSON error', e));
+      };
+
+      copyMarkdownBtn.onclick = () => {
+        const fullMd = docObj.content || '(No docObj.content found)';
+        navigator.clipboard.writeText(fullMd)
+          .then(() => { alert('Markdown content copied to clipboard!'); })
+          .catch(e => console.error('Copy MD error', e));
+      };
+    } catch (err) {
+      console.error('[doc.html] Error retrieving final document result:', err);
+      progressStatus.textContent = `Error retrieving final document: ${err.message || err}`;
+    }
+  }
+
+  console.log("[doc.html] Finished setting up event listeners.");
+})();
+</script>
+
+</body>
+</html>
