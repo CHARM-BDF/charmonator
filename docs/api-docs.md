@@ -318,8 +318,7 @@ GET /conversions/documents/{jobId}/result
           "text_extraction_method": "ocr",
           "extraction_confidence": 0.95,
           "model_name": null,
-          "isFirstPage": true,
-          "tags": ["footnotes"] // example if tags matched
+          "isFirstPage": true
         },
         "annotations": {
           "description": "A short summary of what is on this page"
@@ -392,8 +391,11 @@ POST /summaries
   "json_sum": "append",  // default is "append"
 
   // NEW (Optional) - seeds the accumulation for fold/delta-fold
-  // For "fold", can be text or JSON; for "delta-fold", typically an array of "delta" entries
-  "initial_summary": "This is the starting summary so far..."
+  "initial_summary": "This is the starting summary so far...",
+
+  // NEW optional fields for storing the result in custom annotation keys:
+  "annotation_field": "summary",        // default is "summary"
+  "annotation_field_delta": "summary_delta" // default is "summary_delta"
 }
 ```
 
@@ -406,9 +408,9 @@ POST /summaries
 - **`temperature`**: LLM temperature (float).  
 - **`json_schema`**: If given, output is forced to conform to that schema.  
 - **`json_sum`**: For `"delta-fold"`, how new deltas combine with the existing summary (usually `"append"`).  
-- **`initial_summary`**: *Optional*—If you want to *seed* the accumulated summary for `"fold"` or `"delta-fold"` with an existing summary.  
-  - For **fold**, it can be any string/object you want to fold into subsequent chunks.  
-  - For **delta-fold**, it is usually an **array**, so you can continue appending new deltas to that array.
+- **`initial_summary`**: *Optional*—If you want to *seed* the accumulated summary for `"fold"` or `"delta-fold"`.  
+- **`annotation_field`**: *Optional*—The doc-level or chunk-level annotations key where the summary is stored (defaults to `"summary"`).  
+- **`annotation_field_delta`**: *Optional*—For `"delta-fold"`, the chunk-level annotations key for each partial “delta” (defaults to `"summary_delta"`).
 
 #### Immediate Response
 
@@ -439,7 +441,7 @@ GET /summaries/{job_id}/result
 ```
 - If still `pending`/`processing`: HTTP 202 + partial status  
 - If `error`: HTTP 500 + error message  
-- If `complete`: returns the final doc object with summaries stored in `annotations.summary`.
+- If `complete`: returns the final doc object with summaries stored in the annotation fields specified, defaulting to `annotations.summary` (and `annotations.summary_delta` for chunk-level partials if method = `delta-fold`).
 
 **Example** final doc object:
 
@@ -463,7 +465,7 @@ GET /summaries/{job_id}/result
   }
 }
 ```
-*(If you requested a `json_schema`, then the `summary` might be structured JSON. If method = `delta-fold`, then `annotations.summary` could be an **array** of delta items.)*
+*(If you requested a `json_schema`, then the `summary` might be structured JSON. If method = `delta-fold`, then `annotations.summary` could be an **array** of delta items, and each chunk’s partial summary is in `annotations.summary_delta`.)*
 
 ---
 
@@ -644,4 +646,20 @@ Many Charmonizer endpoints (like `/conversions/documents`, `/summaries`, `/embed
   }
 }
 ```
+
+```
+---
+
+## Additional Considerations
+
+- **Linking of Chunks:**  
+  When a document object’s chunk group is wrapped at runtime (using `getWrappedChunksForGroup()`), the system adds two non-persisted fields to each wrapped chunk:
+  - `previousChunk`: Points to the immediately preceding chunk.
+  - `nextChunk`: Points to the immediately following chunk.
+
+- **Content Assembly:**  
+  If a document object does not have a direct `content` field but has a `content_chunk_group` defined, the resolved content is produced by concatenating the results of `getResolvedContent()` for each child in the corresponding chunk array.
+
+- **Embeddings:**  
+  The `embeddings` field is not automatically generated but is populated by dedicated endpoints (such as the document embeddings endpoint). When present, it contains a mapping from a model name to its computed embedding vector.
 

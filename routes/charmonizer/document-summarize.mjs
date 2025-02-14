@@ -200,7 +200,7 @@ function parseLLMReply(rawText, job) {
 
 /**
  * Summarize the entire doc with a single LLM call.
- * - Store in top-level doc.annotations.summary
+ * - Store in top-level doc.annotations[job.annotation_field]
  */
 async function runFullSummarization(job, topDoc) {
   const fullContent = topDoc.getResolvedContent();
@@ -225,13 +225,13 @@ async function runFullSummarization(job, topDoc) {
   const finalData = parseLLMReply(assistantReply, job);
 
   ensureAnnotations(topDoc._doc);
-  topDoc._doc.annotations.summary = finalData;
+  topDoc._doc.annotations[job.annotation_field] = finalData;
   job.chunks_completed = 1;
 }
 
 /**
- * Summarize each chunk in chunk.annotations.summary,
- * but now also pass the doc’s ID, and gather preceding + succeeding chunk text.
+ * Summarize each chunk in chunk.annotations[job.annotation_field],
+ * while optionally passing in preceding/succeeding chunk text for context.
  */
 async function runMapSummarization(job, topDoc) {
   const chunkArray = topDoc.getChunksForGroup(job.chunk_group);
@@ -298,7 +298,7 @@ async function runMapSummarization(job, topDoc) {
     if (!thisChunk._doc.annotations) {
       thisChunk._doc.annotations = {};
     }
-    thisChunk._doc.annotations.summary = finalData;
+    thisChunk._doc.annotations[job.annotation_field] = finalData;
 
     chunkArray[i] = thisChunk.toObject();
     job.chunks_completed++;
@@ -307,10 +307,10 @@ async function runMapSummarization(job, topDoc) {
 }
 
 /**
- * "fold": keep an accumulated summary, store final in top-level doc.annotations.summary
+ * "fold": keep an accumulated summary, store final in top-level doc.annotations[job.annotation_field].
  * Also pass preceding & succeeding chunk text around the current chunk.
  *
- * MODIFIED: Seeds accumulatedSummary with job.initial_summary if present.
+ * If job.initial_summary is present, seed the accumulation with that.
  */
 async function runFoldSummarization(job, topDoc) {
   const chunkArray = topDoc.getChunksForGroup(job.chunk_group);
@@ -385,16 +385,17 @@ async function runFoldSummarization(job, topDoc) {
   }
 
   ensureAnnotations(topDoc._doc);
-  topDoc._doc.annotations.summary = accumulatedSummary;
+  topDoc._doc.annotations[job.annotation_field] = accumulatedSummary;
 }
 
 /**
  * "delta-fold":
  *   - each chunk => produce "delta" JSON
- *   - keep an array of deltas in doc.annotations.summary
+ *   - keep an array of deltas in doc.annotations[job.annotation_field]
+ *   - store chunk-level deltas in chunk.annotations[job.annotation_field_delta]
  *   - also pass preceding & succeeding chunk text
  *
- * MODIFIED: if job.initial_summary is an array, we start with that.
+ * If job.initial_summary is an array, start with that.
  */
 async function runDeltaFoldSummarization(job, topDoc) {
   const chunkArray = topDoc.getChunksForGroup(job.chunk_group);
@@ -409,8 +410,8 @@ async function runDeltaFoldSummarization(job, topDoc) {
   let deltaArray = [];
   if (job.initial_summary && Array.isArray(job.initial_summary)) {
     deltaArray = job.initial_summary;
-  } else if (job.jsonSum === 'append' && Array.isArray(topDoc._doc.annotations.summary)) {
-    deltaArray = topDoc._doc.annotations.summary;
+  } else if (job.jsonSum === 'append' && Array.isArray(topDoc._doc.annotations[job.annotation_field])) {
+    deltaArray = topDoc._doc.annotations[job.annotation_field];
   }
 
   const docId = topDoc._doc.id || '(no-id)';
@@ -473,7 +474,8 @@ async function runDeltaFoldSummarization(job, topDoc) {
     if (!thisChunk._doc.annotations) {
       thisChunk._doc.annotations = {};
     }
-    thisChunk._doc.annotations.summary_delta = newDelta;
+    // Store chunk-level delta in job.annotation_field_delta (default: "summary_delta")
+    thisChunk._doc.annotations[job.annotation_field_delta] = newDelta;
     chunkArray[i] = thisChunk.toObject();
 
     if (job.jsonSum === 'append') {
@@ -485,7 +487,7 @@ async function runDeltaFoldSummarization(job, topDoc) {
   }
 
   topDoc.setChunksForGroup(job.chunk_group, chunkArray);
-  topDoc._doc.annotations.summary = deltaArray;
+  topDoc._doc.annotations[job.annotation_field] = deltaArray;
 }
 
 /**
@@ -524,7 +526,7 @@ const router = express.Router();
  * Request fields:
  *   - document: the doc object
  *   - method: "full", "map", "fold", or "delta-fold"
- *   - chunk_group: name of chunk group for map/fold/delta-fold
+ *   - chunk_group: which chunk group to use (pages, paragraphs, etc.) for map/fold/delta-fold
  *   - context_chunks_before: how many prior chunks to pass in as context
  *   - context_chunks_after: how many subsequent chunks to pass in as context
  *   - model: which LLM to use
@@ -533,6 +535,9 @@ const router = express.Router();
  *   - json_schema: optional (the JSON schema for structured output)
  *   - json_sum: optional, controls how "delta" merges with existing summary (default: "append")
  *   - initial_summary: optional, seeds fold/delta-fold accumulation
+ *
+ *   - annotation_field: (string) default "summary"; doc-level or chunk-level summary field
+ *   - annotation_field_delta: (string) default "summary_delta"; chunk-level field for "delta-fold" partial summaries
  */
 router.post('/', async (req, res) => {
   try {
@@ -547,8 +552,11 @@ router.post('/', async (req, res) => {
       temperature,
       json_schema,
       json_sum,
-      // ADDED:
-      initial_summary
+      initial_summary,
+
+      // NEW fields controlling the annotation names to store into:
+      annotation_field = 'summary',
+      annotation_field_delta = 'summary_delta'
     } = req.body;
 
     if (!document || !method) {
@@ -566,8 +574,11 @@ router.post('/', async (req, res) => {
       temperature: temperature || 0.7,
       jsonSchema: json_schema || null,
       jsonSum: json_sum || 'append',
-      // store initial_summary:
-      initial_summary: initial_summary ?? null
+      initial_summary: initial_summary ?? null,
+
+      // store the annotation fields
+      annotation_field,
+      annotation_field_delta
     });
 
     // run in background
