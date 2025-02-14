@@ -297,6 +297,17 @@
         <textarea id="initialSummaryInput" rows="3" placeholder="Optional existing summary or array"></textarea>
       </div>
 
+      <!-- NEW: annotation_field and annotation_field_delta inputs -->
+      <div style="display:flex; flex-direction:column; width:220px;">
+        <label for="annotationFieldInput"><b>Annotation Field</b></label>
+        <input type="text" id="annotationFieldInput" value="summary">
+      </div>
+
+      <div style="display:flex; flex-direction:column; width:220px;">
+        <label for="annotationFieldDeltaInput"><b>Delta Field</b></label>
+        <input type="text" id="annotationFieldDeltaInput" value="summary_delta">
+      </div>
+
     </div>
 
     <div style="text-align:center; margin-top:20px;">
@@ -391,6 +402,10 @@
     const summaryModelSelect = document.getElementById('summaryModelSelect');
     const deltaFoldMergeModeSelect = document.getElementById('deltaFoldMergeModeSelect');
     const initialSummaryInput = document.getElementById('initialSummaryInput');
+
+    // NEW: annotation fields
+    const annotationFieldInput = document.getElementById('annotationFieldInput');
+    const annotationFieldDeltaInput = document.getElementById('annotationFieldDeltaInput');
 
     // JavaScript Playground
     const jsPlaygroundContainer = document.getElementById('jsPlaygroundContainer');
@@ -708,6 +723,10 @@
         }
       }
 
+      // read annotation fields
+      const annotation_field = annotationFieldInput.value.trim() || 'summary';
+      const annotation_field_delta = annotationFieldDeltaInput.value.trim() || 'summary_delta';
+
       const body = {
         document: loadedDoc,
         model: sumModel,
@@ -719,7 +738,9 @@
         temperature,
         json_schema,
         json_sum,
-        initial_summary
+        initial_summary,
+        annotation_field,
+        annotation_field_delta
       };
 
       try {
@@ -800,7 +821,6 @@
 
 
     // ---------------- JavaScript Playground ----------------
-    // We'll define some code templates:
     const codeTemplates = {
       extractSummary: `function run(docObj) {
   // docObj is the JSON Document object
@@ -858,8 +878,6 @@
       const userJs = userCodeArea.value;
       jsPlaygroundOutput.innerHTML = '<em>Running...</em>';
 
-      // We'll create a function from the user code
-      // and pass in the loadedDoc as docObj
       let runFn;
       try {
         runFn = new Function('docObj', userJs + '\n\nreturn run(docObj);');
@@ -876,13 +894,11 @@
         return;
       }
 
-      // result should be a string of markdown
       if (typeof result !== 'string') {
         jsPlaygroundOutput.innerHTML = `<span style="color:red;">Your run() did not return a string. Instead got type: ${typeof result}</span>`;
         return;
       }
 
-      // Render as markdown
       const sanitizedMd = DOMPurify.sanitize(marked.parse(result));
       jsPlaygroundOutput.innerHTML = sanitizedMd;
     });
