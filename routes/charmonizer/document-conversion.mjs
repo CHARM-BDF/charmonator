@@ -110,7 +110,7 @@ const router = express.Router();
  * POST /conversions/documents
  *
  * Accepts:
- *  - "file" (multipart) for the doc (currently PDF only)
+ *  - "file" (multipart) for the doc (currently PDF or DOCX)
  *  - "pdf_dataurl" if uploading inline base64 for a PDF
  *  - "model" => fallback LLM
  *  - "ocr_threshold" => numeric, default=0.7
@@ -180,9 +180,11 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file or pdf_dataurl provided.' });
     }
 
-    // We only handle PDFs for now
-    if (!originalMimetype.includes('pdf')) {
-      return res.status(400).json({ error: 'Currently only PDFs are supported.' });
+    // We only handle PDF or .docx here
+    // MIME for docx often has 'officedocument.wordprocessingml.document'
+    if (!originalMimetype.includes('pdf')
+        && !originalMimetype.includes('officedocument.wordprocessingml.document')) {
+      return res.status(400).json({ error: 'Currently only PDF or DOCX are supported.' });
     }
 
     // Compute SHA-256
@@ -277,10 +279,10 @@ router.delete('/documents/:jobId', (req, res) => {
 });
 
 /**
- * processDocumentAsync => For PDF:
- *   - parse page count
- *   - For each page, convert to PNG, run OCR or fallback LLM
- *   - (Optionally) detect doc boundaries with preceding page image if detect_document_boundaries is true
+ * processDocumentAsync => For PDF or DOCX:
+ *   - detect PDF vs .docx
+ *   - if PDF, parse page count, run OCR/fallback
+ *   - if DOCX, parse with mammoth, chunk by form-feed
  *   - assemble page chunks, build top-level doc object
  */
 async function processDocumentAsync(jobRec) {
@@ -288,182 +290,283 @@ async function processDocumentAsync(jobRec) {
   const tmpPdfPath = path.join('uploads', `${jobRec.id}.pdf`);
   await fs.promises.writeFile(tmpPdfPath, jobRec.fileBuffer);
 
-  // parse PDF for page count
-  const parsed = await pdfParse(jobRec.fileBuffer);
-  const numPages = parsed.numpages || 1;
+  // Decide PDF vs DOCX vs error:
+  const mime = jobRec.fileMimetype.toLowerCase();
 
-  jobRec.pages_total = numPages;
-  jobRec.pages_converted = 0;
+  // If it's PDF:
+  if (mime.includes('pdf')) {
+    // Original PDF logic in helper:
+    await processPdfDocument(jobRec, tmpPdfPath);
+  }
+  // If it's .docx:
+  else if (mime.includes('officedocument.wordprocessingml.document')) {
+    await processDocxDocument(jobRec);
+  }
+  else {
+    // Not PDF or DOCX => error out
+    jobRec.status = 'error';
+    jobRec.error = `Unsupported file type: ${jobRec.fileMimetype}`;
+    return;
+  }
+}
 
-  let chunkPages = [];
-  let allTextPieces = [];
-  let currentStart = 0;
+/**
+ * If PDF, do the original OCR + fallback approach
+ */
+async function processPdfDocument(jobRec, tmpPdfPath) {
+  try {
+    const parsed = await pdfParse(jobRec.fileBuffer);
+    const numPages = parsed.numpages || 1;
+    jobRec.pages_total = numPages;
+    jobRec.pages_converted = 0;
 
-  // We'll store the *previous* page image dataUrl for doc-boundary detection if requested
-  let previousPageImageDataUrl = null;
+    let chunkPages = [];
+    let allTextPieces = [];
+    let currentStart = 0;
 
-  for (let i = 0; i < numPages; i++) {
-    const converter = pdf2picFromPath(tmpPdfPath, {
-      density: 300,
-      saveFilename: `page_${i}_${jobRec.id}`,
-      savePath: 'uploads',
-      format: 'png',
-      width: 1536,
-      height: 1988
-    });
-    const output = await converter(i + 1); // pdf2pic is 1-based page indexing
-    if (!output?.path) {
-      console.warn(`[processDocumentAsync] no path from pdf2pic for page ${i}`);
-      continue;
-    }
+    let previousPageImageDataUrl = null;
 
-    // read as PNG
-    const image = await Jimp.read(output.path);
-    const pngBuffer = await image.getBuffer('image/png');
+    for (let i = 0; i < numPages; i++) {
+      const converter = pdf2picFromPath(tmpPdfPath, {
+        density: 300,
+        saveFilename: `page_${i}_${jobRec.id}`,
+        savePath: 'uploads',
+        format: 'png',
+        width: 1536,
+        height: 1988
+      });
+      const output = await converter(i + 1); // pdf2pic is 1-based index
+      if (!output?.path) {
+        console.warn(`[processDocumentAsync] no path from pdf2pic for page ${i}`);
+        continue;
+      }
 
-    // Tesseract
-    const ocr = await ocrPageBuffer(pngBuffer);
-    let pageText = ocr.text;
-    let textMethod = 'ocr';
-    let confidence = ocr.qualityScore;
-    let fallbackModel = null;
+      // read as PNG
+      const image = await Jimp.read(output.path);
+      const pngBuffer = await image.getBuffer('image/png');
 
-    // We may store an LLM fallback result's description or tags if used:
-    let fallbackDescription = null;
-    let fallbackTags = null;
+      // Tesseract OCR
+      const ocr = await ocrPageBuffer(pngBuffer);
+      let pageText = ocr.text;
+      let textMethod = 'ocr';
+      let confidence = ocr.qualityScore;
+      let fallbackModel = null;
 
-    // If confidence is below threshold, fallback to LLM for text
-    // (which also might yield isFirstPage if doc boundary detection is set)
-    let isFirstPageDetected = false;
-    if (confidence < jobRec.ocr_threshold) {
-      const fallbackResult = await fallbackVisionModel(
-        pngBuffer,
-        jobRec.model,
-        jobRec,
-        jobRec.detect_document_boundaries ? previousPageImageDataUrl : null
-      );
-      pageText = fallbackResult.markdown;
-      isFirstPageDetected = fallbackResult.isFirstPage;
-      textMethod = 'vision_model';
-      fallbackModel = jobRec.model;
+      // Possibly store fallback's short desc/tags if used:
+      let fallbackDescription = null;
+      let fallbackTags = null;
 
-      // grab description and tags from fallback
-      fallbackDescription = fallbackResult.description || null;
-      fallbackTags = fallbackResult.tags || [];
+      // if confidence < threshold => fallback
+      let isFirstPageDetected = false;
+      if (confidence < jobRec.ocr_threshold) {
+        const fallbackResult = await fallbackVisionModel(
+          pngBuffer,
+          jobRec.model,
+          jobRec,
+          jobRec.detect_document_boundaries ? previousPageImageDataUrl : null
+        );
+        pageText = fallbackResult.markdown;
+        isFirstPageDetected = fallbackResult.isFirstPage;
+        textMethod = 'vision_model';
+        fallbackModel = jobRec.model;
 
-      // If we used fallback, let's assume a "confidence"
-      confidence = Math.max(confidence, 0.9);
-    } else {
-      // If we didn't fallback for text but still want doc-boundary detection:
-      if (jobRec.detect_document_boundaries) {
-        // For the first page, we override to true anyway
-        if (i === 0) {
-          isFirstPageDetected = true;
-        } else {
-          const boundaryOnly = await fallbackVisionModel(
-            pngBuffer,
-            jobRec.model,
-            jobRec,
-            previousPageImageDataUrl
-          );
-          isFirstPageDetected = boundaryOnly.isFirstPage;
+        fallbackDescription = fallbackResult.description || null;
+        fallbackTags = fallbackResult.tags || [];
 
-          // if the boundary check gave us description/tags, store them too
-          if (boundaryOnly.description) {
-            fallbackDescription = boundaryOnly.description;
-          }
-          if (boundaryOnly.tags && boundaryOnly.tags.length > 0) {
-            fallbackTags = boundaryOnly.tags;
+        confidence = Math.max(confidence, 0.9);
+      } else {
+        // if doc-boundary detection is on but no fallback for text
+        if (jobRec.detect_document_boundaries) {
+          if (i === 0) {
+            isFirstPageDetected = true;
+          } else {
+            const boundaryOnly = await fallbackVisionModel(
+              pngBuffer,
+              jobRec.model,
+              jobRec,
+              previousPageImageDataUrl
+            );
+            isFirstPageDetected = boundaryOnly.isFirstPage;
+
+            if (boundaryOnly.description) {
+              fallbackDescription = boundaryOnly.description;
+            }
+            if (boundaryOnly.tags && boundaryOnly.tags.length > 0) {
+              fallbackTags = boundaryOnly.tags;
+            }
           }
         }
       }
-    }
 
-    // For the very first page, always set isFirstPage=true
-    if (i === 0) {
-      isFirstPageDetected = true;
-    }
-
-    // Remove the PNG
-    fs.promises.unlink(output.path).catch(() => {});
-
-    // Build a chunk object for the page
-    const chunkId = `${jobRec.fileSha256}/pages@${i}`;
-    const pageNumber = i + 1;
-
-    const pageChunk = {
-      id: chunkId,
-      parent: jobRec.fileSha256,
-      start: currentStart,
-      length: pageText.length,
-      content: pageText,
-      metadata: {
-        page_number: pageNumber,
-        text_extraction_method: textMethod,
-        extraction_confidence: parseFloat(confidence.toFixed(3)),
-        model_name: fallbackModel,
-        isFirstPage: isFirstPageDetected,
-        // Include original filename/path & file hash
-        originating_filename: jobRec.originatingFilename || '',
-        originating_filepath: jobRec.originatingFilepath || '',
-        originating_file_sha256: jobRec.fileSha256
+      if (i === 0) {
+        isFirstPageDetected = true;
       }
-    };
 
-    if (fallbackTags && fallbackTags.length > 0) {
-      pageChunk.metadata.tags = fallbackTags;
-    }
-    if (fallbackDescription) {
-      pageChunk.annotations = { description: fallbackDescription };
-    }
+      fs.promises.unlink(output.path).catch(() => {});
 
-    // Prepend metadata as comments in pageChunk.content
-    {
+      const chunkId = `${jobRec.fileSha256}/pages@${i}`;
+      const pageNumber = i + 1;
+
+      const pageChunk = {
+        id: chunkId,
+        parent: jobRec.fileSha256,
+        start: currentStart,
+        length: pageText.length,
+        content: pageText,
+        metadata: {
+          page_number: pageNumber,
+          text_extraction_method: textMethod,
+          extraction_confidence: parseFloat(confidence.toFixed(3)),
+          model_name: fallbackModel,
+          isFirstPage: isFirstPageDetected,
+          originating_filename: jobRec.originatingFilename || '',
+          originating_filepath: jobRec.originatingFilepath || '',
+          originating_file_sha256: jobRec.fileSha256
+        }
+      };
+
+      if (fallbackTags && fallbackTags.length > 0) {
+        pageChunk.metadata.tags = fallbackTags;
+      }
+      if (fallbackDescription) {
+        pageChunk.annotations = { description: fallbackDescription };
+      }
+
+      // Prepend metadata as comments
       const metaComments = Object.entries(pageChunk.metadata)
         .map(([k, v]) => `<!-- METADATA ${k}: ${v} -->`)
         .join('\n');
       pageChunk.content = `${metaComments}\n${pageChunk.content}`;
+
+      chunkPages.push(pageChunk);
+      allTextPieces.push(pageChunk.content);
+      currentStart += pageText.length;
+      jobRec.pages_converted = i + 1;
+
+      if (jobRec.detect_document_boundaries) {
+        const pageBase64 = pngBuffer.toString('base64');
+        previousPageImageDataUrl = `data:image/png;base64,${pageBase64}`;
+      }
     }
 
-    chunkPages.push(pageChunk);
-    allTextPieces.push(pageChunk.content);
-    currentStart += pageText.length;
-    jobRec.pages_converted = i + 1;
+    await fs.promises.unlink(tmpPdfPath).catch(() => {});
 
-    // If doc boundary detection is enabled, prepare preceding image for next iteration
-    if (jobRec.detect_document_boundaries) {
-      const pageBase64 = pngBuffer.toString('base64');
-      previousPageImageDataUrl = `data:image/png;base64,${pageBase64}`;
-    }
+    const combinedContent = allTextPieces.join(
+      jobRec.page_numbering ? "\n\n<!-- page boundary -->\n\n" : "\n\n"
+    );
+
+    const topLevelId = jobRec.fileSha256;
+    const docObject = {
+      id: topLevelId,
+      content: combinedContent,
+      metadata: {
+        mimetype: jobRec.fileMimetype,
+        document_sha256: jobRec.fileSha256,
+        size_bytes: jobRec.fileBuffer.length,
+        originating_filename: jobRec.originatingFilename || '',
+        originating_filepath: jobRec.originatingFilepath || ''
+      },
+      chunks: {
+        pages: chunkPages
+      }
+    };
+
+    jobRec.fileBuffer = null;
+    jobRec.finalDocObject = docObject;
+    jobRec.status = 'complete';
+  } catch (err) {
+    jobRec.status = 'error';
+    jobRec.error = `PDF processing failed: ${err.message}`;
   }
+}
 
-  await fs.promises.unlink(tmpPdfPath).catch(() => {});
+/**
+ * If DOCX, parse with Mammoth, then trivially "split pages" by form-feed (\f).
+ */
+async function processDocxDocument(jobRec) {
+  const tmpDocxPath = path.join('uploads', `${jobRec.id}.docx`);
+  await fs.promises.writeFile(tmpDocxPath, jobRec.fileBuffer);
 
-  // Combine all page text
-  const combinedContent = allTextPieces.join(
-    jobRec.page_numbering ? "\n\n<!-- page boundary -->\n\n" : "\n\n"
-  );
+  try {
+    // Use mammoth to extract raw text
+    const mammoth = await import('mammoth'); // ensure mammoth is installed
+    const result = await mammoth.extractRawText({ path: tmpDocxPath });
+    let docxText = result.value || '';
 
-  // Top-level doc object
-  const topLevelId = jobRec.fileSha256;
-  const docObject = {
-    id: topLevelId,
-    content: combinedContent,
-    metadata: {
-      mimetype: jobRec.fileMimetype,
-      document_sha256: jobRec.fileSha256,
-      size_bytes: jobRec.fileBuffer.length,
-      originating_filename: jobRec.originatingFilename || '',
-      originating_filepath: jobRec.originatingFilepath || ''
-    },
-    chunks: {
-      pages: chunkPages
+    // Simple "page" splitting by form-feed
+    const pages = docxText.split(/\f/g);
+    jobRec.pages_total = pages.length;
+    jobRec.pages_converted = 0;
+
+    let chunkPages = [];
+    let allTextPieces = [];
+    let currentStart = 0;
+
+    for (let i = 0; i < pages.length; i++) {
+      const pageText = pages[i].trim();
+      const pageNumber = i + 1;
+
+      const chunkId = `${jobRec.fileSha256}/pages@${i}`;
+      const pageChunk = {
+        id: chunkId,
+        parent: jobRec.fileSha256,
+        start: currentStart,
+        length: pageText.length,
+        content: "",
+        metadata: {
+          page_number: pageNumber,
+          text_extraction_method: "mammoth",
+          extraction_confidence: 1.0,
+          model_name: null,
+          isFirstPage: (i === 0),
+          originating_filename: jobRec.originatingFilename || '',
+          originating_filepath: jobRec.originatingFilepath || '',
+          originating_file_sha256: jobRec.fileSha256
+        }
+      };
+
+      // Prepend metadata lines
+      const metaComment =
+        `<!-- METADATA page_number: ${pageNumber} -->\n` +
+        `<!-- METADATA text_extraction_method: mammoth -->\n`;
+      pageChunk.content = metaComment + pageText;
+
+      chunkPages.push(pageChunk);
+      allTextPieces.push(pageChunk.content);
+      currentStart += pageText.length;
+      jobRec.pages_converted++;
     }
-  };
 
-  jobRec.fileBuffer = null;
-  jobRec.finalDocObject = docObject;
-  jobRec.status = 'complete';
+    // Combine for top-level `content`
+    const combinedContent = allTextPieces.join(
+      jobRec.page_numbering ? "\n\n<!-- page boundary -->\n\n" : "\n\n"
+    );
+
+    const topLevelId = jobRec.fileSha256;
+    const docObject = {
+      id: topLevelId,
+      content: combinedContent,
+      metadata: {
+        mimetype: jobRec.fileMimetype,
+        document_sha256: jobRec.fileSha256,
+        size_bytes: jobRec.fileBuffer.length,
+        originating_filename: jobRec.originatingFilename || '',
+        originating_filepath: jobRec.originatingFilepath || ''
+      },
+      chunks: {
+        pages: chunkPages
+      }
+    };
+
+    jobRec.fileBuffer = null;
+    jobRec.finalDocObject = docObject;
+    jobRec.status = 'complete';
+  } catch (err) {
+    jobRec.status = 'error';
+    jobRec.error = `DOCX processing failed: ${err.message}`;
+  } finally {
+    await fs.promises.unlink(tmpDocxPath).catch(() => {});
+  }
 }
 
 export default router;
