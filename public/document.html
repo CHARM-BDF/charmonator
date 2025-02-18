@@ -249,6 +249,8 @@
           <option value="map">map</option>
           <option value="fold">fold</option>
           <option value="delta-fold">delta-fold</option>
+          <!-- Add "map-merge" here -->
+          <option value="map-merge">map-merge</option>
         </select>
       </div>
 
@@ -308,6 +310,11 @@
         <input type="text" id="annotationFieldDeltaInput" value="summary_delta">
       </div>
 
+      <!-- For map-merge method only: merge_summaries_guidance -->
+      <div style="display:flex; flex-direction:column; width:220px;">
+        <label for="mergeSummariesGuidanceInput"><b>Merge Summaries Guidance</b></label>
+        <textarea id="mergeSummariesGuidanceInput" rows="3" placeholder="How to combine chunk-level summaries?"></textarea>
+      </div>
     </div>
 
     <div style="text-align:center; margin-top:20px;">
@@ -316,6 +323,41 @@
 
     <div class="progress-box" id="summaryProgressBox" style="display:none;">
       <div id="summaryProgressStatus"></div>
+    </div>
+  </div>
+
+  <!-- NEW: Chunk Group Creation Container -->
+  <div class="result-container" id="chunkGroupContainer" style="display:none;">
+    <h2>Chunk Group Creation</h2>
+    <p style="font-size:14px; color:#333;">
+      This section re-chunks the existing document into a new group by calling the 
+      <code>/chunkings</code> endpoint with strategy <code>merge_and_split</code>.
+    </p>
+    <div style="display:flex; flex-wrap:wrap; gap:20px; border:1px solid #eee; padding:20px; border-radius:10px;">
+      <div style="display:flex; flex-direction:column; width:220px;">
+        <label for="chunkGroupStrategySelect"><b>Strategy</b></label>
+        <select id="chunkGroupStrategySelect">
+          <option value="merge_and_split" selected>merge_and_split</option>
+        </select>
+      </div>
+      <div style="display:flex; flex-direction:column; width:220px;">
+        <label for="sourceChunkGroupInput"><b>Source Chunk Group</b></label>
+        <input type="text" id="sourceChunkGroupInput" value="pages">
+      </div>
+      <div style="display:flex; flex-direction:column; width:220px;">
+        <label for="chunkSizeInput"><b>Max Chunk Size (chars)</b></label>
+        <input type="number" id="chunkSizeInput" value="1000">
+      </div>
+      <div style="display:flex; flex-direction:column; width:220px;">
+        <label for="newChunkGroupNameInput"><b>New Chunk Group Name</b></label>
+        <input type="text" id="newChunkGroupNameInput" value="mergedPages">
+      </div>
+    </div>
+    <div style="text-align:center; margin-top:20px;">
+      <button class="convert-button" id="createChunkGroupBtn">Create/Add Chunk Group</button>
+    </div>
+    <div class="progress-box" id="chunkGroupProgressBox" style="display:none;">
+      <div id="chunkGroupProgressStatus"></div>
     </div>
   </div>
 
@@ -354,9 +396,12 @@
 <script>
   (function(){
     // ---------------------- Constants & DOM Elements ----------------------
-    const CONVERSION_BASE = 'api/charmonizer/v1';
-    const MODELS_ENDPOINT = 'api/charmonator/v1/models';
-    const SUMMARIES_BASE = 'api/charmonizer/v1/summaries';
+    const CHARMONIZER_BASE = 'api/charmonizer/v1';
+    const CHARMONATOR_BASE = 'api/charmonator/v1'; // for /models
+    const MODELS_ENDPOINT = `${CHARMONATOR_BASE}/models`;
+    const CONVERSION_BASE = `${CHARMONIZER_BASE}/conversions/documents`;
+    const SUMMARIES_BASE = `${CHARMONIZER_BASE}/summaries`;
+    const CHUNKINGS_BASE = `${CHARMONIZER_BASE}/chunkings`;
 
     // File input for PDF
     const fileInput = document.getElementById('fileInput');
@@ -402,10 +447,19 @@
     const summaryModelSelect = document.getElementById('summaryModelSelect');
     const deltaFoldMergeModeSelect = document.getElementById('deltaFoldMergeModeSelect');
     const initialSummaryInput = document.getElementById('initialSummaryInput');
-
-    // NEW: annotation fields
     const annotationFieldInput = document.getElementById('annotationFieldInput');
     const annotationFieldDeltaInput = document.getElementById('annotationFieldDeltaInput');
+    const mergeSummariesGuidanceInput = document.getElementById('mergeSummariesGuidanceInput');
+
+    // Chunk Group Creation
+    const chunkGroupContainer = document.getElementById('chunkGroupContainer');
+    const chunkGroupStrategySelect = document.getElementById('chunkGroupStrategySelect');
+    const sourceChunkGroupInput = document.getElementById('sourceChunkGroupInput');
+    const chunkSizeInput = document.getElementById('chunkSizeInput');
+    const newChunkGroupNameInput = document.getElementById('newChunkGroupNameInput');
+    const createChunkGroupBtn = document.getElementById('createChunkGroupBtn');
+    const chunkGroupProgressBox = document.getElementById('chunkGroupProgressBox');
+    const chunkGroupProgressStatus = document.getElementById('chunkGroupProgressStatus');
 
     // JavaScript Playground
     const jsPlaygroundContainer = document.getElementById('jsPlaygroundContainer');
@@ -549,6 +603,9 @@
         // Summaries UI
         summariesContainer.style.display = 'block';
         summaryProgressBox.style.display = 'none';
+        // Chunk Group UI
+        chunkGroupContainer.style.display = 'block';
+        chunkGroupProgressBox.style.display = 'none';
         // JS Playground
         jsPlaygroundContainer.style.display = 'block';
       } catch (err) {
@@ -593,7 +650,7 @@
       progressStatus.textContent = 'Starting conversion job...';
 
       try {
-        const response = await fetch(`${CONVERSION_BASE}/conversions/documents`, {
+        const response = await fetch(CONVERSION_BASE, {
           method: 'POST',
           body: formData
         });
@@ -616,7 +673,7 @@
       while (keepPolling) {
         await new Promise(r => setTimeout(r, 2000));
         try {
-          const statusRes = await fetch(`${CONVERSION_BASE}/conversions/documents/${jobId}`);
+          const statusRes = await fetch(`${CHARMONIZER_BASE}/conversions/documents/${jobId}`);
           if (statusRes.status === 404) {
             progressStatus.textContent = 'Job not found (404).';
             keepPolling = false;
@@ -647,7 +704,7 @@
     }
     async function retrieveDocResult(jobId) {
       try {
-        const res = await fetch(`${CONVERSION_BASE}/conversions/documents/${jobId}/result`);
+        const res = await fetch(`${CHARMONIZER_BASE}/conversions/documents/${jobId}/result`);
         if (res.status === 202) {
           progressStatus.textContent = `202: Still processing, will poll again...`;
           pollJobStatus(jobId);
@@ -667,6 +724,10 @@
         // Summaries
         summariesContainer.style.display = 'block';
         summaryProgressBox.style.display = 'none';
+
+        // Chunk Group creation
+        chunkGroupContainer.style.display = 'block';
+        chunkGroupProgressBox.style.display = 'none';
 
         // JS Playground
         jsPlaygroundContainer.style.display = 'block';
@@ -743,8 +804,16 @@
         annotation_field_delta
       };
 
+      // If method=map-merge, include merge_summaries_guidance
+      if (method === 'map-merge') {
+        const mg = mergeSummariesGuidanceInput.value.trim();
+        if (mg) {
+          body.merge_summaries_guidance = mg;
+        }
+      }
+
       try {
-        const startRes = await fetch(`${SUMMARIES_BASE}`, {
+        const startRes = await fetch(SUMMARIES_BASE, {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
           body: JSON.stringify(body)
@@ -816,6 +885,120 @@
         jsonOutput.textContent = JSON.stringify(loadedDoc, null, 2);
       } catch (err) {
         summaryProgressStatus.textContent = `Error fetching summary result: ${err.message}`;
+      }
+    }
+
+    // ---------------- Chunk Group Creation (merge_and_split) ----------------
+    createChunkGroupBtn.addEventListener('click', async () => {
+      if (!loadedDoc) {
+        alert('No doc object is loaded. Convert a PDF or load a .doc.json first.');
+        return;
+      }
+      chunkGroupProgressBox.style.display = 'block';
+      chunkGroupProgressStatus.textContent = 'Starting chunk group creation...';
+
+      const strategy = chunkGroupStrategySelect.value;
+      const sourceGroup = sourceChunkGroupInput.value.trim();
+      const size = parseInt(chunkSizeInput.value, 10) || 1000;
+      const newName = newChunkGroupNameInput.value.trim() || 'mergedPages';
+
+      const body = {
+        document: loadedDoc,
+        strategy,
+        chunk_size: size,
+        chunk_group: sourceGroup
+      };
+
+      try {
+        const startRes = await fetch(CHUNKINGS_BASE, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(body)
+        });
+        const startData = await startRes.json();
+        if (!startRes.ok) {
+          chunkGroupProgressStatus.textContent = `Error: ${startData.error || 'Failed to start chunking job'}`;
+          return;
+        }
+        const jobId = startData.job_id;
+        chunkGroupProgressStatus.textContent = `Chunking job started (job_id=${jobId}). Polling...`;
+        pollChunkingJob(jobId, newName);
+      } catch (err) {
+        chunkGroupProgressStatus.textContent = `Error starting chunking: ${err.message}`;
+      }
+    });
+
+    async function pollChunkingJob(jobId, newGroupName) {
+      let keepPolling = true;
+      while (keepPolling) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const stRes = await fetch(`${CHUNKINGS_BASE}/${jobId}`);
+          if (stRes.status === 404) {
+            chunkGroupProgressStatus.textContent = 'Chunking job not found.';
+            return;
+          }
+          const stData = await stRes.json();
+          const { status, progress, error } = stData;
+          if (status === 'pending' || status === 'in_progress') {
+            chunkGroupProgressStatus.textContent = `Chunking: ${status} - ${progress || 0}% done.`;
+          } else if (status === 'error') {
+            chunkGroupProgressStatus.textContent = `Chunking job error: ${error}`;
+            keepPolling = false;
+          } else if (status === 'complete') {
+            chunkGroupProgressStatus.textContent = 'Chunking complete. Fetching result.';
+            keepPolling = false;
+            fetchChunkingResult(jobId, newGroupName);
+          } else {
+            chunkGroupProgressStatus.textContent = `Unknown status: ${status}`;
+            keepPolling = false;
+          }
+        } catch (err) {
+          chunkGroupProgressStatus.textContent = `Poll error: ${err.message}`;
+          keepPolling = false;
+        }
+      }
+    }
+
+    async function fetchChunkingResult(jobId, newGroupName) {
+      try {
+        const res = await fetch(`${CHUNKINGS_BASE}/${jobId}/result`);
+        if (res.status === 409) {
+          const errData = await res.json();
+          chunkGroupProgressStatus.textContent = `Conflict or error: ${errData.error || 'Job not complete yet'}`;
+          return;
+        }
+        if (!res.ok) {
+          const eText = await res.text();
+          chunkGroupProgressStatus.textContent = `HTTP ${res.status} - ${eText}`;
+          return;
+        }
+        const finalData = await res.json(); // { job_id, chunks: [...] }
+        chunkGroupProgressStatus.textContent = 'Chunking result retrieved. Incorporating into doc...';
+
+        // finalData.chunks is an array of {chunk_index, chunk_data:{title, body}}.
+        // We'll build a new chunk array of doc objects under loadedDoc.chunks[newGroupName].
+        if (!loadedDoc.chunks) {
+          loadedDoc.chunks = {};
+        }
+        loadedDoc.chunks[newGroupName] = finalData.chunks.map((c) => {
+          const idx = c.chunk_index; // 1-based
+          const docChunk = {
+            id: `${loadedDoc.id}/${newGroupName}@${idx - 1}`,
+            parent: loadedDoc.id,
+            content: c.chunk_data.body || '',
+            metadata: {
+              original_title: c.chunk_data.title || ''
+            }
+          };
+          return docChunk;
+        });
+
+        // Now update the display
+        chunkGroupProgressStatus.textContent = `New chunk group "${newGroupName}" created with ${finalData.chunks.length} chunks.`;
+        jsonOutput.textContent = JSON.stringify(loadedDoc, null, 2);
+      } catch (err) {
+        chunkGroupProgressStatus.textContent = `Error fetching chunking result: ${err.message}`;
       }
     }
 

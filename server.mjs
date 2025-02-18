@@ -29,6 +29,9 @@ import summarizeRouter from './routes/charmonizer/document-summarize.mjs';
 
 import embeddingsRouter from './routes/charmonizer/document-embeddings.mjs';
 
+import chunkingsRouter from './routes/charmonizer/document-chunkings.mjs';
+
+
 const require = createRequire(import.meta.url);
 
 // Multer setup for file uploads
@@ -86,6 +89,45 @@ async function main() {
       next();
     });
 
+    // Verbose logging middleware: print a snapshot of all requests with parameters if --verbose is passed
+    if (process.argv.includes('--verbose')) {
+      // Helper function to truncate strings or recursively process objects
+      function truncateValue(value, maxLen = 200) {
+        if (typeof value === 'string') {
+          return value.length > maxLen ? value.slice(0, maxLen) + '... [truncated]' : value;
+        } else if (Array.isArray(value)) {
+          return value.map(item => truncateValue(item, maxLen));
+        } else if (value && typeof value === 'object') {
+          const truncatedObj = {};
+          for (const key in value) {
+            truncatedObj[key] = truncateValue(value[key], maxLen);
+          }
+          return truncatedObj;
+        }
+        return value;
+      }
+
+      app.use((req, res, next) => {
+        const requestSnapshot = {
+          method: req.method,
+          url: req.url,
+          query: truncateValue(req.query),
+          params: truncateValue(req.params),
+          body: truncateValue(req.body),
+          // For file uploads handled by multer, log only metadata
+          file: req.file
+            ? { originalname: req.file.originalname, size: req.file.size }
+            : undefined,
+          files: req.files
+            ? req.files.map(file => ({ originalname: file.originalname, size: file.size }))
+            : undefined,
+        };
+
+        console.log('Request Snapshot:', requestSnapshot);
+        next();
+      });
+    }
+
     // Charmonator endpoints:
     app.use(CHARMONATOR_API_PREFIX, listModelsRouter);
 
@@ -100,7 +142,7 @@ async function main() {
     // Charmonizer document summarization routes:
     app.use(CHARMONIZER_API_PREFIX + '/summaries', summarizeRouter);
     app.use(CHARMONIZER_API_PREFIX + '/embeddings', embeddingsRouter);
-
+    app.use(CHARMONIZER_API_PREFIX + '/chunkings', chunkingsRouter);
 
     // Start listening
     app.listen(PORT, () => {

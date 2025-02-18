@@ -353,11 +353,17 @@ POST /summaries
 
 - **Description**: Summarizes a [Document Object](#document-object-specification) in either a single pass or chunk-by-chunk. Returns a `job_id` to poll.
 
-- **Methods**: **`"full"`, `"map"`, `"fold"`, or `"delta-fold"`**.
-  - `"full"` = single pass on the entire doc
-  - `"map"` = summarize each chunk individually (optionally with some context from before/after each chunk)
-  - `"fold"` = iterative accumulation
-  - `"delta-fold"` = iterative partial accumulation
+- **Methods**: **`"full"`, `"map"`, `"fold"`, `"delta-fold"`, `"map-merge"`, or `"merge"`**.
+  - `"full"` = single pass on the entire doc  
+  - `"map"` = summarize each chunk individually (optionally with some context from before/after each chunk)  
+  - `"fold"` = iterative accumulation  
+  - `"delta-fold"` = iterative partial accumulation  
+  - `"map-merge"` = first summarize each chunk individually, then iteratively merge those chunk-level summaries  
+  - **`"merge"`** = merges **pre-existing** chunk-level summaries into a single top-level summary; assumes each chunk already has a summary in `annotations[annotation_field]`.
+
+- **`merge_mode`** (string, optional) – **applies to `"merge"` and `"map-merge"`**:
+  - `"left-to-right"` (default) – merges summaries in a simple linear pass  
+  - `"hierarchical"` – merges summaries in pairs (like merge-sort), potentially producing more balanced merges
 
 - **JSON-Structured Summaries**: Optionally specify `json_schema` to enforce a JSON format.
 
@@ -367,11 +373,12 @@ POST /summaries
 {
   "document": { /* The doc object */ },
   "model": "gpt-4o",
-  "method": "fold",            // or "full", "map", "delta-fold"
-  "chunk_group": "pages",      // required if method != "full"
-  "context_chunks_before": 1,  // optional
-  "context_chunks_after": 2,   // optional
-  "guidance": "Use bullet points only.", // optional instructions
+  "method": "merge",          // or "full", "map", "fold", "delta-fold", "map-merge"
+  "merge_mode": "hierarchical", // optional, default is "left-to-right" if omitted
+  "chunk_group": "pages",     // required if method != "full"
+  "context_chunks_before": 1,
+  "context_chunks_after": 2,
+  "guidance": "Use bullet points only.",
   "temperature": 0.7,
 
   // optional JSON schema for structured output
@@ -388,29 +395,34 @@ POST /summaries
   },
 
   // optional, controls how "delta" merges with existing summary in "delta-fold"
-  "json_sum": "append",  // default is "append"
+  "json_sum": "append",
 
-  // NEW (Optional) - seeds the accumulation for fold/delta-fold
-  "initial_summary": "This is the starting summary so far...",
+  // optional seed for fold/delta-fold
+  "initial_summary": "Some starting content...",
 
-  // NEW optional fields for storing the result in custom annotation keys:
-  "annotation_field": "summary",        // default is "summary"
-  "annotation_field_delta": "summary_delta" // default is "summary_delta"
+  // optional fields for storing the result in custom annotation keys:
+  "annotation_field": "summary",
+  "annotation_field_delta": "summary_delta",
+
+  // For "map-merge" or "merge" only
+  "merge_summaries_guidance": "Explain how to combine partial summaries, preserving all points."
 }
 ```
 
 - **`document`**: The doc object to summarize.  
-- **`method`**: `"full"`, `"map"`, `"fold"`, or `"delta-fold"`.  
-- **`chunk_group`**: Which chunk group (like `"pages"`) to operate on when method != `"full"`.  
+- **`method`**: `"full"`, `"map"`, `"fold"`, `"delta-fold"`, `"map-merge"`, or `"merge"`.  
+- **`merge_mode`**: (optional) `"left-to-right"` or `"hierarchical"` — how to merge chunk-level summaries for `"merge"`/`"map-merge"`. Defaults to `"left-to-right"`.  
+- **`chunk_group`**: Which chunk group to operate on when method != `"full"`.  
 - **`context_chunks_before`**/**`context_chunks_after`**: How many chunks to pass in as context.  
 - **`model`**: LLM to use.  
-- **`guidance`**: Additional user instructions.  
-- **`temperature`**: LLM temperature (float).  
+- **`guidance`**: Additional user instructions for summarizing.  
+- **`temperature`**: LLM sampling temperature (float).  
 - **`json_schema`**: If given, output is forced to conform to that schema.  
 - **`json_sum`**: For `"delta-fold"`, how new deltas combine with the existing summary (usually `"append"`).  
-- **`initial_summary`**: *Optional*—If you want to *seed* the accumulated summary for `"fold"` or `"delta-fold"`.  
-- **`annotation_field`**: *Optional*—The doc-level or chunk-level annotations key where the summary is stored (defaults to `"summary"`).  
-- **`annotation_field_delta`**: *Optional*—For `"delta-fold"`, the chunk-level annotations key for each partial “delta” (defaults to `"summary_delta"`).
+- **`initial_summary`**: For `"fold"` / `"delta-fold"`, seeds the accumulation.  
+- **`annotation_field`**: The doc-level or chunk-level annotations key where the summary is stored (default: `"summary"`).  
+- **`annotation_field_delta`**: For `"delta-fold"`, the chunk-level key for each partial “delta” (default: `"summary_delta"`).  
+- **`merge_summaries_guidance`**: (string) used by `"map-merge"` or `"merge"`, providing instructions on how to combine partial summaries.
 
 #### Immediate Response
 
@@ -428,11 +440,13 @@ GET /summaries/{job_id}
 ```json
 {
   "status": "processing",
-  "chunks_total": 3,
-  "chunks_completed": 1
+  "chunks_total": 5,
+  "chunks_completed": 2
 }
 ```
 - **`status`**: `"pending"`, `"processing"`, `"complete"`, or `"error"`.  
+- **`chunks_total`**: The total number of chunks or steps to process.  
+- **`chunks_completed`**: How many chunks or steps are finished so far.
 
 #### Retrieving Final Result
 
@@ -441,7 +455,7 @@ GET /summaries/{job_id}/result
 ```
 - If still `pending`/`processing`: HTTP 202 + partial status  
 - If `error`: HTTP 500 + error message  
-- If `complete`: returns the final doc object with summaries stored in the annotation fields specified, defaulting to `annotations.summary` (and `annotations.summary_delta` for chunk-level partials if method = `delta-fold`).
+- If `complete`: returns the final doc object with the summary stored in the annotation fields specified.
 
 **Example** final doc object:
 
@@ -450,7 +464,7 @@ GET /summaries/{job_id}/result
   "id": "mydoc-sha256",
   "content": "...",
   "annotations": {
-    "summary": "High-level summary from 'full' or 'fold'"
+    "summary": "High-level summary from 'full', 'fold', 'merge', or the final merged summary if 'map-merge'."
   },
   "chunks": {
     "pages": [
@@ -458,14 +472,14 @@ GET /summaries/{job_id}/result
         "id": "mydoc-sha256/pages@0",
         "content": "...",
         "annotations": {
-          "summary": "Page 1 summary..."
+          "summary": "Chunk-level summary..."
         }
       }
     ]
   }
 }
 ```
-*(If you requested a `json_schema`, then the `summary` might be structured JSON. If method = `delta-fold`, then `annotations.summary` could be an **array** of delta items, and each chunk’s partial summary is in `annotations.summary_delta`.)*
+*(If you requested a `json_schema`, then the `summary` might be structured JSON. If method = `delta-fold`, then `annotations.summary` could be an **array** of deltas, and each chunk’s partial summary is in `annotations.summary_delta`. For `map-merge`, the final top-level summary is stored in `annotations.summary`, while each chunk also has a partial summary. For `merge`, chunk summaries must already exist, and the endpoint simply merges them into a single doc-level summary, optionally controlled by `merge_mode`.)*
 
 ---
 
@@ -553,6 +567,102 @@ DELETE /embeddings/{jobId}
 
 ---
 
+### 9. Document Chunkings (Long-Running)
+
+```
+POST /chunkings
+```
+- **Description**: Splits or merges existing chunks in a [Document Object](#document-object-specification), returning a `job_id` to poll until the chunking operation is complete.  
+- **Currently** supports a single strategy: `"merge_and_split"`.  
+- **Content-Type**: `application/json`.
+
+#### Request Body
+
+```jsonc
+{
+  "document": { /* The doc object */ },
+  "strategy": "merge_and_split",
+  "chunk_size": 1000,
+  "chunk_group": "pages"
+}
+```
+
+- **`document`** (object, required): The [Document Object](#document-object-specification) you want to re-chunk.
+- **`strategy`** (string, required): Currently only `"merge_and_split"`.
+- **`chunk_size`** (number, required for `merge_and_split`): Maximum token count for each new chunk.
+- **`chunk_group`** (string, optional): The existing chunk group to read from. Defaults to `"all"` if not provided.
+
+#### Immediate Response
+
+```json
+{
+  "job_id": "some-uuid",
+  "status": "pending"
+}
+```
+
+- The `status` will quickly move to `"in_progress"` once processing begins.
+
+#### Poll Job Status
+
+```
+GET /chunkings/:job_id
+```
+
+**Response** (example):
+```json
+{
+  "job_id": "some-uuid",
+  "status": "in_progress",
+  "progress": 35,
+  "error": null
+}
+```
+- **`status`** can be `"pending"`, `"in_progress"`, `"complete"`, or `"error"`.
+- **`progress`**: integer 0–100 indicating approximate progress.
+- **`error`**: present if `status` is `"error"`.
+
+#### Poll Final Result
+
+```
+GET /chunkings/:job_id/result
+```
+
+- If `status` is still `"pending"` or `"in_progress"`, returns **409** with `{"error":"Job not complete yet"}`.
+- If `status` is `"error"`, returns **409** with `{"status":"error","error":"..."}`.
+- If `status` is `"complete"`, returns:
+
+```json
+{
+  "job_id": "some-uuid",
+  "chunks": [
+    {
+      "chunk_index": 1,
+      "chunk_data": {
+        "title": "Document (part 1)",
+        "body": "Text for chunk 1..."
+      }
+    },
+    {
+      "chunk_index": 2,
+      "chunk_data": {
+        "title": "Document (part 2)",
+        "body": "Text for chunk 2..."
+      }
+    }
+    // ...
+  ]
+}
+```
+
+- **`chunks`** is an array of the newly created chunks. Each entry has:
+  - **`chunk_index`** (number): 1-based index of this chunk.
+  - **`chunk_data`** (object): Contains a `title` and `body` string for the chunk.
+
+*(Currently, the result is returned in a simplified array form rather than a full [Document Object](#document-object-specification).)*
+
+---
+
 ## Error Handling
 
 All endpoints produce appropriate HTTP status codes on errors:
@@ -632,7 +742,7 @@ Many Charmonizer endpoints (like `/conversions/documents`, `/summaries`, `/embed
   "chunks": {
     "pages": [
       {
-        "id": "0ab6f8.../pages@0",
+        "id": "0ab6f8abcdef1234567890/pages@0",
         "content": "# Page 1 text...",
         "metadata": {
           "page_number": 1,
@@ -647,7 +757,6 @@ Many Charmonizer endpoints (like `/conversions/documents`, `/summaries`, `/embed
 }
 ```
 
-```
 ---
 
 ## Additional Considerations
@@ -662,4 +771,3 @@ Many Charmonizer endpoints (like `/conversions/documents`, `/summaries`, `/embed
 
 - **Embeddings:**  
   The `embeddings` field is not automatically generated but is populated by dedicated endpoints (such as the document embeddings endpoint). When present, it contains a mapping from a model name to its computed embedding vector.
-
