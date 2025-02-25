@@ -2,6 +2,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { JSONDocument } from '../lib/json-document.mjs'; // or wherever your helper lives
 
 function showUsageAndExit() {
@@ -28,6 +29,10 @@ Commands:
       (default target: "summary"). If --metadata is provided, prints all metadata for each chunk
       as markdown comments in the format: <!-- METADATA: <key>: <value> -->
 
+  wrap
+      Reads from stdin and converts the input into a valid JSON document object.
+      The input becomes the document's "content" and its SHA‑256 hash is used as the "id".
+
 Examples:
   json-doc.js extract-markdown mydoc.json
   json-doc.js extract-summary  mydoc.json
@@ -44,9 +49,8 @@ Examples:
   # Extract annotations from each chunk in the "pages" chunk group, printing the "summary" annotation.
   json-doc.js extract-chunk-annotations mydoc.json --chunk-group pages
 
-  # Extract annotations from each chunk in the "pages" chunk group, using "description" as the target,
-  # and printing metadata for each chunk.
-  json-doc.js extract-chunk-annotations mydoc.json --chunk-group pages --target description --metadata
+  # Wrap content from stdin into a JSON document object
+  cat somefile.txt | json-doc.js wrap
 `);
   process.exit(1);
 }
@@ -93,10 +97,40 @@ async function main() {
       await doExtractChunkAnnotations(rest);
       break;
 
+    case 'wrap':
+      await doWrap();
+      break;
+
     default:
       console.error(`[ERROR] Unknown command: ${command}`);
       showUsageAndExit();
   }
+}
+
+/**
+ * Command handler: wrap
+ * Reads all data from stdin and converts it into a valid JSON document object.
+ * The input text becomes the document's "content" and a SHA‑256 hash of the content is used as the "id".
+ */
+async function doWrap() {
+  let input = '';
+  process.stdin.setEncoding('utf8');
+
+  // Read all data from stdin.
+  for await (const chunk of process.stdin) {
+    input += chunk;
+  }
+
+  // Compute a SHA‑256 hash of the input to serve as a unique id.
+  const hash = crypto.createHash('sha256').update(input).digest('hex');
+
+  const docObj = {
+    id: hash,
+    content: input,
+  };
+
+  // Output the JSON document object.
+  console.log(JSON.stringify(docObj, null, 2));
 }
 
 /**
