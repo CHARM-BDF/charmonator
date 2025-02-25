@@ -256,6 +256,7 @@ function parseLLMReply(rawText, job) {
 /**
  * Summarize the entire doc with one LLM call, store in top-level doc.annotations.
  */
+
 async function runFullSummarization(job, topDoc) {
   const fullContent = topDoc.getResolvedContent();
   const basePrompt = SYSTEM_PROMPTS.full.replace('<user-provided guidance>', job.guidance || '');
@@ -273,13 +274,20 @@ async function runFullSummarization(job, topDoc) {
     }
   ];
 
-  const assistantReply = await callLLM(chatModel, transcript);
+  // ADJUST so we wrap job.jsonSchema with type: 'json_schema'
+  const options = job.jsonSchema
+    ? { response_format: { type: 'json_schema', json_schema: { name: 'forced-schema', schema: job.jsonSchema } } }
+    : {};
+
+  const assistantReply = await callLLM(chatModel, transcript, options);
   const finalData = parseLLMReply(assistantReply, job);
 
   ensureAnnotations(topDoc._doc);
   topDoc._doc.annotations[job.annotation_field] = finalData;
   job.chunks_completed = 1;
 }
+
+
 
 /**
  * Summarize each chunk separately. Partial summary is stored in chunk.annotations[job.annotation_field].
@@ -740,16 +748,18 @@ function makeChatModel(modelName, systemText, temperature) {
 
 /**
  * Helper: call the LLM with minimal transcript
+ * 
+ * Changed to accept an optional `options` object, 
+ * which we pass as the fourth argument to `extendTranscript`.
  */
-async function callLLM(chatModel, minimalTranscript) {
-  
+async function callLLM(chatModel, minimalTranscript, options = {}) {
   console.log("minimalTranscript:", minimalTranscript);
 
   const prefixFrag = {
     messages: minimalTranscript.map(m => ({ role: m.role, content: m.content }))
   };
 
-  const suffixFrag = await chatModel.extendTranscript(prefixFrag);
+  const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
   const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
   if (!lastMsg || lastMsg.role !== 'assistant') {
     return '(No output from LLM?)';
