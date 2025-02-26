@@ -791,7 +791,7 @@ const router = express.Router();
  */
 router.post('/', async (req, res) => {
   try {
-    const {
+    let {
       document,
       method,
       chunk_group,
@@ -813,6 +813,17 @@ router.post('/', async (req, res) => {
 
     if (!document || !method) {
       return res.status(400).json({ error: 'document and method are required' });
+    }
+
+    // [ADDED FOR JSON STRING PARSING]
+    // If json_schema is a string, try parsing it as JSON.
+    if (typeof json_schema === 'string') {
+      try {
+        json_schema = JSON.parse(json_schema);
+      } catch (err) {
+        console.warn('Could not parse json_schema string as JSON:', err);
+        json_schema = null;
+      }
     }
 
     const job = createJobRecord(document, {
