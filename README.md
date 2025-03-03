@@ -39,7 +39,7 @@ Then, modify it to suit your needs, such as placing your API keys for OpenAI/Ant
 Once configured, to run the server, execute:
 
 ```
-node server.js
+node server.mjs
 ```
 
 The server will start on the port specified in the config file, and you can begin making requests to the API endpoints in [docs/api-docs.md](./docs/api-docs.md).
