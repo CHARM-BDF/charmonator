@@ -27,6 +27,8 @@ For documentation on the JSON document object schema, please see [document.md](d
 
 Create a config file at `conf/config.json`.
 
+(Make sure the `conf` directory exists: `mkdir -p conf`.)
+
 You can create an example config with `scripts/generate-example-config.js`:
 
 ```bash
