@@ -18,7 +18,7 @@ import { loadToolDefinitionsFromConfig, initModelTools } from './lib/tool-loader
 import { toolRegistry } from './lib/tools.mjs';
 
 import embeddingRouter from './routes/embedding.mjs';
-import extendTranscriptRouter from './routes/extend-transcript.mjs';
+import transcriptExtensionRouter from './routes/transcript-extension.mjs';
 import listModelsRouter from './routes/list-models.mjs';
 import charmonatorConversionRouter from './routes/conversion-router.mjs';
 
@@ -133,7 +133,7 @@ async function main() {
 
     app.use(CHARMONATOR_API_PREFIX + '/embedding', embeddingRouter);
 
-    app.use(CHARMONATOR_API_PREFIX + "/chat", extendTranscriptRouter);
+    app.use(CHARMONATOR_API_PREFIX + "/transcript", transcriptExtensionRouter);
     app.use(CHARMONATOR_API_PREFIX + "/conversion", charmonatorConversionRouter);
 
     // Charmonizer document conversion routes:

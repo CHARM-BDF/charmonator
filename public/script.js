@@ -547,7 +547,7 @@ async function sendMessage() {
       transcript: currentTranscript.toJSON()
     };
 
-    const response = await fetch(`${CHARMONATOR_API_URL}/chat/extend_transcript`, {
+    const response = await fetch(`${CHARMONATOR_API_URL}/transcript/extension`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

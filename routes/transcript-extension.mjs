@@ -6,7 +6,7 @@ import { FunctionTool } from '../lib/function.mjs';
 
 const router = express.Router();
 
-router.post('/extend_transcript', async (req, res) => {
+router.post('/extension', async (req, res) => {
   let transcriptCopy = null;
   try {
     const {

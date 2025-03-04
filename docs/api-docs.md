@@ -56,10 +56,10 @@ GET /models
 
 ---
 
-### 2. Extend Transcript
+### 2. Transcript Extension
 
 ```
-POST /chat/extend_transcript
+POST /transcript/extension
 ```
 
 - **Description**: Extends an existing conversation transcript using a specified model. This endpoint returns new messages in the conversation (usually from the assistant, possibly with tool calls/responses).  
