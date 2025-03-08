@@ -123,40 +123,46 @@ router.post('/image', async (req, res) => {
     }
 
     const systemInstructions =
-      `You are an AI that transcribes images into Markdown and determines if the current page ` +
-      `is likely the *first page of a new document*. ` +
-      `Return valid JSON with keys "markdown" (string) and "isFirstPage" (boolean). ` +
-      `Also, optionally include "description" (string) and "tags" (array of strings). ` +
+      `You are an AI that precisely transcribes images into github-formatted markdown under user guidance.\n\n` +
+      `For text formatted into multiple columns, correctly sequence the content of the columns into the logical order for reading.` +
+      `You also try to determine if the current page is likely the *first page of a document*.\n\n` +
+      `Return a valid JSON object with keys "markdown" (string) and "isFirstPage" (boolean).\n\n` +
+      `If the user requests a description, add a "description" field (string) as a short description of the page.\n\n` +
+      `If the user requests tagging, add a "tags" field (array of strings) providing the user-defined tags that "describe" this page.\n\n` +
+      `Beyond the image provided, the user may provide additional context to help interpret the image.\n\n` +
+      `The user may also provide additional instructions on how to interpret graphical content and figures.\n\n` +
       `Do NOT wrap the JSON in triple backticks. Return ONLY raw JSON.`;
 
     let transcript = new TranscriptFragment();
     transcript = transcript.plus(new Message('system', systemInstructions));
 
     // Build user request text
-    let userText = `Please accurately transcribe this image into well-structured Markdown word for word, then decide if this is the first page of a document.\n`;
+    let userText = `Please accurately transcribe this image into well-structured markdown word for word.  Also decide if this is likely the first page of a document. If there are tables, preserve tabular structure using github-formatted-markdown tables when possible. When proper preservation of the structure as a table is not possible, reformat the content to preserve information and understanding as precisely as possible.\n\n`;
+
     userText += `Output must be raw JSON with at least { "markdown": "...", "isFirstPage": ... }\n\n`;
 
     if (description) {
-      userText += `**High-level user-provided description**: ${description}\n\n`;
+      userText += `**Context: High-level user-provided description**: ${description}\n\n`;
     }
     if (intent) {
-      userText += `**Intended use**: ${intent}\n\n`;
+      userText += `**Context: Intended use of this transcription**: ${intent}\n\n`;
     }
     if (graphic_instructions) {
       userText += `**Additional instructions for graphics**: ${graphic_instructions}\n\n`;
     }
     if (preceding_content) {
-      userText += `**Preceding markdown**:\n${preceding_content}\n\n`;
+      userText += `**Context: Markdown from transcribing the preceding page**:\n${preceding_content}\n\n`;
     }
     if (preceding_context) {
-      userText += `**Preceding context**:\n${preceding_context}\n\n`;
+      userText += `**Context: A short description of the document that precedes this page**:\n${preceding_context}\n\n`;
     }
+    // TODO: Fix the preceding page bug to actually clearly differentiate this page from the current page:
     if (preceding_image_url) {
-      userText += `A preceding page image is provided.\n\n`;
+      userText += `**Context**: Note that a preceding page image is provided in addition to the current page.\n\n`;
     }
 
     if (tags) {
-      userText += `**The user also defines the following tags** (with definitions):\n`;
+      userText += `**The user also requests tagging with the following tags** (according to their definitions):\n`;
       for (const [tagName, tagDef] of Object.entries(tags)) {
         userText += `- Tag "${tagName}": ${tagDef}\n`;
       }
@@ -166,7 +172,7 @@ router.post('/image', async (req, res) => {
     if (describe) {
       userText += `Please include a "description" field with 1–3 sentences summarizing the page.\n`;
     } else {
-      userText += `No short description needed.\n`;
+      userText += `No short description needed.\n\n`;
     }
 
     userText += `Return your answer as raw JSON (no code fences), with keys: "markdown", "isFirstPage", optional "description", optional "tags".\n`;
