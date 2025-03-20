@@ -101,6 +101,34 @@ async function runChunkingJob(job) {
 
       job.status = 'complete';
 
+    } else if (strategy === 'split_by_token_count') {
+      if (!chunk_size || chunk_size < 1) {
+        throw new Error('Invalid chunk_size for split_by_token_count (must be > 0).');
+      }
+
+      // mergeChunksByTokenCount does both merging and splitting around maxTokens
+      // We'll store results in a new group, e.g. chunk_group + ":mergedAndSplit"
+      const newGroupName = `${chunk_group}:splitByTokenCount`;
+      const newChunks = topDoc.splitOversizedChunksByTokenCount(
+        chunk_size,
+        chunk_group,        // source group
+        'cl100k_base',      // Tiktoken encoding
+        newGroupName        // new group name
+      );
+
+      job.progress = 100;
+
+      // Transform them to the design’s { chunk_index, chunk_data } array
+      job.chunks = newChunks.map((chunkObj, idx) => ({
+        chunk_index: idx + 1,
+        chunk_data: {
+          title: `${filename} (Part ${idx + 1})`,
+          body: chunkObj.content
+        }
+      }));
+
+      job.status = 'complete';
+
     } else {
       throw new Error(`Unsupported strategy: ${strategy}`);
     }
@@ -142,7 +170,7 @@ router.post('/', async (req, res) => {
     if (!strategy || typeof strategy !== 'string') {
       return res.status(400).json({ error: 'Field "strategy" must be a string.' });
     }
-    if (strategy === 'merge_and_split') {
+    if (strategy === 'merge_and_split' || strategy === 'split_by_token_count') {
       if (typeof chunk_size !== 'number' || chunk_size <= 0) {
         return res.status(400).json({ error: 'chunk_size must be a positive number.' });
       }
