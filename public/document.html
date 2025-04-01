@@ -338,6 +338,7 @@
         <label for="chunkGroupStrategySelect"><b>Strategy</b></label>
         <select id="chunkGroupStrategySelect">
           <option value="merge_and_split" selected>merge_and_split</option>
+          <option value="split_by_token_count">split_by_token_count</option>
         </select>
       </div>
       <div style="display:flex; flex-direction:column; width:220px;">
@@ -345,7 +346,7 @@
         <input type="text" id="sourceChunkGroupInput" value="pages">
       </div>
       <div style="display:flex; flex-direction:column; width:220px;">
-        <label for="chunkSizeInput"><b>Max Chunk Size (chars)</b></label>
+        <label for="chunkSizeInput"><b>Max Chunk Size (tokens)</b></label>
         <input type="number" id="chunkSizeInput" value="1000">
       </div>
       <div style="display:flex; flex-direction:column; width:220px;">
