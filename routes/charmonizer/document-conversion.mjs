@@ -114,6 +114,7 @@ const router = express.Router();
  *  - "pdf_dataurl" if uploading inline base64 for a PDF
  *  - "model" => fallback LLM
  *  - "ocr_threshold" => numeric, default=0.7
+ *  - "scrutinize" => string, default="none"
  *  - "page_numbering" => string "true" or "false", default "true"
  *  - "description" => optional, for passing to the fallback vision model
  *  - "intent" => optional, for passing to the fallback vision model
@@ -130,6 +131,7 @@ router.post('/documents', upload.single('file'), async (req, res) => {
   try {
     const {
       ocr_threshold = 0.7,
+      scrutinize = "none",
       model = null,
       page_numbering = 'true',
       description,
@@ -194,6 +196,7 @@ router.post('/documents', upload.single('file'), async (req, res) => {
     const jobRec = createJobRecord({
       fileBuffer,
       ocr_threshold: parseFloat(ocr_threshold),
+      scrutinize: scrutinize,
       model,
       page_numbering: String(page_numbering).toLowerCase() === 'true',
       fileMimetype: originalMimetype,

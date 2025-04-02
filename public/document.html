@@ -194,6 +194,14 @@
       <textarea id="graphicInstructionsInput" rows="3" placeholder="Extra instructions for charts/figures"></textarea>
     </div>
 
+    <div class="option-item">
+      <label for="scrutinize">Scrutinize method</label>
+      <select id="scrutinize">
+        <option value="none" selected>none</option>
+        <option value="diff2">Two way comparison</option>
+      </select>
+    </div>
+
     <!-- File upload area (PDF) -->
     <div style="width: 100%; margin-top:10px;">
       <label style="font-weight:600; display:block; margin-bottom:5px;">File to convert (.pdf)</label>
@@ -314,6 +322,11 @@
       <div style="display:flex; flex-direction:column; width:220px;">
         <label for="mergeSummariesGuidanceInput"><b>Merge Summaries Guidance</b></label>
         <textarea id="mergeSummariesGuidanceInput" rows="3" placeholder="How to combine chunk-level summaries?"></textarea>
+      </div>
+
+      <div class="option-item">
+        <label for="scrutinize">scrutinize</label>
+        <input type="string" id="scrutinize" value="none">
       </div>
     </div>
 
@@ -630,6 +643,7 @@
       formData.append('file', uploadedFile);
       formData.append('model', modelSelect.value);
       formData.append('ocr_threshold', ocrThresholdInput.value);
+      formData.append('scrutinize', scrutinize.value);
       formData.append('page_numbering', pageNumberingSelect.value);
       formData.append('detect_document_boundaries', detectBoundariesSelect.value);
       formData.append('describe', describeSelect.value);
