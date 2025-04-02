@@ -11,8 +11,11 @@ Usage:
   json-doc.js <command> <arguments...>
 
 Commands:
-  extract-markdown             <path/to/document.json>
+  extract-markdown             <path/to/document.json> [--metadata]
       Reads the JSON file (doc/chunk format) and prints all extracted text/markdown.
+      If --metadata is given, print metadata in <!-- --> comments:
+        - For top-level content, metadata is printed at the top.
+        - If reassembling from a content_chunk_group, metadata is printed per chunk.
 
   extract-summary              <path/to/document.json>
       Reads the JSON file and prints doc.annotations.summary if present.
@@ -55,6 +58,33 @@ Examples:
   process.exit(1);
 }
 
+/**
+ * Parses arguments for "extract-markdown" and returns an object:
+ *   {
+ *     filePath: string,
+ *     metadataFlag: boolean
+ *   }
+ */
+function parseExtractMarkdownArgs(args) {
+  let filePath = null;
+  let metadataFlag = false;
+  for (const arg of args) {
+    if (arg === '--metadata') {
+      metadataFlag = true;
+    } else if (arg.startsWith('--')) {
+      console.error(`[ERROR] Unknown option: ${arg}`);
+      process.exit(1);
+    } else {
+      if (filePath !== null) {
+        console.error('[ERROR] Too many positional arguments for extract-markdown.');
+        showUsageAndExit();
+      }
+      filePath = arg;
+    }
+  }
+  return { filePath, metadataFlag };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   if (args.length < 1) {
@@ -64,12 +94,15 @@ async function main() {
   const [command, ...rest] = args;
 
   switch (command) {
-    case 'extract-markdown':
-      if (rest.length < 1) {
+    case 'extract-markdown': {
+      // Parse arguments to handle optional --metadata
+      const { filePath, metadataFlag } = parseExtractMarkdownArgs(rest);
+      if (!filePath) {
         showUsageAndExit();
       }
-      await doExtractMarkdown(rest[0]);
+      await doExtractMarkdown(filePath, { metadataFlag });
       break;
+    }
 
     case 'extract-summary':
       if (rest.length < 1) {
@@ -83,7 +116,7 @@ async function main() {
       await doMergeChunksByCount(rest);
       break;
 
-    case 'concatenate':
+    case 'concatenate': {
       // Expect: concatenate <outputFile> <inputFile1> [inputFile2 ...]
       if (rest.length < 2) {
         console.error('[ERROR] concatenate requires at least one output file and one input file.');
@@ -92,6 +125,7 @@ async function main() {
       }
       await doConcatenate(rest[0], rest.slice(1));
       break;
+    }
 
     case 'extract-chunk-annotations':
       await doExtractChunkAnnotations(rest);
@@ -135,13 +169,45 @@ async function doWrap() {
 
 /**
  * Loads the doc from disk, then prints the top-level doc's resolved Markdown content.
+ * If --metadata is given:
+ *   - For top-level content, prints docObj.metadata in <!-- --> at the top (if any).
+ *   - If docObj is reassembled from a content_chunk_group, prints each chunk’s metadata in <!-- --> before that chunk’s content.
  */
-async function doExtractMarkdown(jsonFile) {
+async function doExtractMarkdown(jsonFile, { metadataFlag = false } = {}) {
   const docObj = loadJsonDoc(jsonFile);
   const doc = new JSONDocument(docObj);
 
-  const content = doc.getResolvedContent();
-  console.log(content);
+  // Check if we reassemble content from a content_chunk_group
+  const contentChunkGroup = docObj.content_chunk_group;
+  const hasChunkGroup =
+    contentChunkGroup &&
+    docObj.chunks &&
+    Array.isArray(docObj.chunks[contentChunkGroup]);
+
+  if (hasChunkGroup) {
+    // If we have to reassemble from a chunk group, print metadata per chunk if requested
+    const chunks = docObj.chunks[contentChunkGroup];
+    for (const chunkObj of chunks) {
+      if (metadataFlag && chunkObj.metadata) {
+        // Print chunk metadata as HTML comments
+        for (const [key, value] of Object.entries(chunkObj.metadata)) {
+          console.log(`<!-- ${key}: ${value} -->`);
+        }
+      }
+      // Get the chunk's resolved content
+      const chunkDoc = new JSONDocument(chunkObj);
+      console.log(chunkDoc.getResolvedContent());
+    }
+  } else {
+    // Otherwise, just print the doc's top-level resolved content
+    if (metadataFlag && docObj.metadata) {
+      // Print top-level metadata in HTML comments
+      for (const [key, value] of Object.entries(docObj.metadata)) {
+        console.log(`<!-- ${key}: ${value} -->`);
+      }
+    }
+    console.log(doc.getResolvedContent());
+  }
 }
 
 /**
@@ -160,10 +226,10 @@ async function doExtractSummary(jsonFile) {
 
 /**
  * Command handler: merge-chunks-by-count
+ * Expects:
+ *   merge-chunks-by-count <maxTokens> [<encoding>] <path/to/document.json>
  */
 async function doMergeChunksByCount(args) {
-  // We need at least 2 arguments: <maxTokens>, <doc.json>
-  // Possibly 3: <maxTokens>, <encoding>, <doc.json>
   if (args.length < 2) {
     showUsageAndExit();
   }
