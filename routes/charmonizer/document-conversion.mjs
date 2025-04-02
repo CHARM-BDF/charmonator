@@ -420,7 +420,7 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
           model_name: fallbackModel,
           isFirstPage: isFirstPageDetected,
           originating_filename: jobRec.originatingFilename || '',
-          originating_filepath: jobRec.originatingFilepath || '',
+          // originating_filepath: jobRec.originatingFilepath || '',
           originating_file_sha256: jobRec.fileSha256
         }
       };
@@ -464,7 +464,7 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
         document_sha256: jobRec.fileSha256,
         size_bytes: jobRec.fileBuffer.length,
         originating_filename: jobRec.originatingFilename || '',
-        originating_filepath: jobRec.originatingFilepath || ''
+        // originating_filepath: jobRec.originatingFilepath || ''
       },
       chunks: {
         pages: chunkPages
@@ -520,7 +520,7 @@ async function processDocxDocument(jobRec) {
           model_name: null,
           isFirstPage: (i === 0),
           originating_filename: jobRec.originatingFilename || '',
-          originating_filepath: jobRec.originatingFilepath || '',
+          // originating_filepath: jobRec.originatingFilepath || '',
           originating_file_sha256: jobRec.fileSha256
         }
       };
@@ -528,7 +528,8 @@ async function processDocxDocument(jobRec) {
       // Prepend metadata lines
       const metaComment =
         `<!-- METADATA page_number: ${pageNumber} -->\n` +
-        `<!-- METADATA text_extraction_method: mammoth -->\n`;
+        `<!-- METADATA text_extraction_method: mammoth -->\n` +
+        `<!-- METADATA originating_filename: ${jobRec.originatingFilename || ''} -->\n` ;
       pageChunk.content = metaComment + pageText;
 
       chunkPages.push(pageChunk);
@@ -551,7 +552,7 @@ async function processDocxDocument(jobRec) {
         document_sha256: jobRec.fileSha256,
         size_bytes: jobRec.fileBuffer.length,
         originating_filename: jobRec.originatingFilename || '',
-        originating_filepath: jobRec.originatingFilepath || ''
+        // originating_filepath: jobRec.originatingFilepath || ''
       },
       chunks: {
         pages: chunkPages
