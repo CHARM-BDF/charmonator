@@ -7,7 +7,24 @@ This server loads models from a top-level `"models"` object in `conf/config.json
 - **`api_key`** (where relevant).
 - Optionally, a custom **`system`** message, **`temperature`**, **`tools`** array, etc.
 
-> **Note**: In all examples below, you’ll see `"api_key"` fields. Be sure to set them to your actual keys in practice. For any environment-based or secret management, you can read them in from environment variables or a secure store.
+Alternatively, you may store your configuration file at a location of your choice specified by the environment variable CHARMONATOR_CONFIG.
+
+### How to configure secrets
+
+The configuration defaults do not include api keys.  Under each model requiring api keys, use the "api_key" field to store the api key.  While you are free to put the api_key field in your `config.json`, we recommend putting secrets in the separate file `conf/config.secret.json`, so that you can share your `config.json` more freely.  Here is an example of how to use a `conf/config.secret.json`:
+
+```
+{
+    "models":
+    {
+        "my-openai-model": {
+            "api_key": "sk-..."
+        }
+    }
+}
+```
+
+If you choose an alternative location for your config.json, config.secret.json will be checeked there.
 
 ### 1) Minimal Example for **OpenAI** (Chat Completion)
 
@@ -18,7 +35,7 @@ This server loads models from a top-level `"models"` object in `conf/config.json
       "api": "OpenAI",
       "model_type": "chat",
 
-      "api_key": "OPENAI_API_KEY_HERE",
+      "api_key": "OPENAI_API_KEY_HERE_OR_IN_SECRET_JSON",
       "model": "gpt-3.5-turbo",  // or "gpt-4"
 
       "temperature": 0.8,
@@ -53,7 +70,7 @@ To use Azure’s flavor of OpenAI, you can set `"api": "OpenAI_Azure"`, plus add
       "api": "OpenAI_Azure",
       "model_type": "chat",
 
-      "api_key": "AZURE_OPENAI_KEY_HERE",
+      "api_key": "AZURE_OPENAI_KEY_HERE_OR_IN_SECRET_JSON",
       "endpoint": "https://my-azure-openai-resource.openai.azure.com/openai/deployments/",
       "api_version": "2023-07-01-preview",
 
@@ -85,7 +102,7 @@ Here:
       "api": "Anthropic",
       "model_type": "chat",
 
-      "api_key": "ANTHROPIC_API_KEY_HERE",
+      "api_key": "ANTHROPIC_API_KEY_HERE_OR_IN_SECRET_JSON",
       "model": "claude-2",   // or "claude-instant-1"
 
       "temperature": 0.8,

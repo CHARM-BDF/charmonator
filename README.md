@@ -16,15 +16,16 @@ For documentation on the JSON document object schema, please see [document.md](d
 
 ## Jump to:
 
- - [How to run](#how-to-run)
+ - [How to install](#how-to-install)
  - [What is charmonator?](#what-is-charmonator)
  - [What is charmonizer?](#what-is-charmonizer)
  - [Configuration management](#configuration-management)
  - [Endpoints](#endpoints)
 
 <a name="how-to-run"></a>
-## How to run
+## How to install
 
+### How to configure
 Create a config file at `conf/config.json`.
 
 (Make sure the `conf` directory exists: `mkdir -p conf`.)
@@ -35,9 +36,24 @@ You can create an example config with `scripts/generate-example-config.js`:
 node scripts/generate-example-config.js > conf/config.json
 ```
 
-Then, modify it to suit your needs, such as placing your API keys for OpenAI/Anthropic/etc. in the appropriate places, and making new model entries.
+Then, modify it to suit your needs.
 
+### How to configure secrets
 
+The configuration defaults do not include api keys.  Under each model requiring api keys, use the "api_key" field to store the api key.  While you are free to put the api_key field in your `config.json`, we recommend putting secrets in the separate file `conf/config.secret.json`, so that you can share your `config.json` more freely.  Here is an example of how to use a `conf/config.secret.json`:
+
+```
+{
+    "models":
+    {
+        "my-openai-model": {
+            "api_key": "sk-..."
+        }
+    }
+}
+```
+
+### How to run
 Once configured, to run the server, execute:
 
 ```
@@ -45,7 +61,6 @@ node server.mjs
 ```
 
 The server will start on the port specified in the config file, and you can begin making requests to the API endpoints in [docs/api-docs.md](./docs/api-docs.md).
-
 
 ### Dependencies
 
