@@ -13,6 +13,7 @@ import pdfParse from 'pdf-parse';
 
 // For fallback LLM-based extraction:
 import { imageToMarkdown } from '../../lib/core.mjs';
+import { scrutinizeViaDiff2 } from '../../lib/scrutinize.mjs';
 
 /**
  * We'll store job data in memory for demonstration.
@@ -54,28 +55,57 @@ async function fallbackVisionModel(imageBuffer, modelName, jobRec, precedingData
   const base64 = imageBuffer.toString('base64');
   const dataUrl = `data:image/png;base64,${base64}`;
 
-  // We'll call imageToMarkdown, optionally passing preceding_image_url, describe, and tags.
-  // That call can return { markdown, isFirstPage, description?, tags? }
-  const result = await imageToMarkdown({
-    imageUrl: dataUrl,
-    preceding_image_url: precedingDataUrl || '',
-    model: modelName,
-    description: jobRec.description || 'A document page with text and possibly diagrams.',
-    intent: jobRec.intent || 'The intended use of this transcription is not specified, so be as precise as possible.',
-    graphic_instructions: jobRec.graphic_instructions,
-    describe: jobRec.describe,
-    tags: jobRec.tags
-  });
+  if(jobRec.scrutinize == 'none') {
+    // We'll call imageToMarkdown, optionally passing preceding_image_url, describe, and tags.
+    // That call can return { markdown, isFirstPage, description?, tags? }
+    const result = await imageToMarkdown({
+      imageUrl: dataUrl,
+      preceding_image_url: precedingDataUrl || '',
+      model: modelName,
+      description: jobRec.description || 'A document page with text and possibly diagrams.',
+      intent: jobRec.intent || 'The intended use of this transcription is not specified, so be as precise as possible.',
+      graphic_instructions: jobRec.graphic_instructions,
+      describe: jobRec.describe,
+      tags: jobRec.tags
+    });
 
-  return {
-    // The main text from the fallback LLM:
-    markdown: result.markdown || '(No fallback output)',
-    isFirstPage: !!result.isFirstPage,
-    // If describe=true was given, we might get a short description
-    description: result.description || '',
-    // If tags were provided and matched, we might get them
-    tags: result.tags || []
-  };
+    return {
+      // The main text from the fallback LLM:
+      markdown: result.markdown || '(No fallback output)',
+      isFirstPage: !!result.isFirstPage,
+      // If describe=true was given, we might get a short description
+      description: result.description || '',
+      // If tags were provided and matched, we might get them
+      tags: result.tags || []
+    };
+  } else if(jobRec.scrutinize == 'diff2') {
+    const results = [];
+    for (let i = 0; i < 2; i++) {
+      const result = await imageToMarkdown({
+        imageUrl: dataUrl,
+        preceding_image_url: precedingDataUrl || '',
+        model: modelName,
+        description: jobRec.description || 'A document page with text and possibly diagrams.',
+        intent: jobRec.intent || 'The intended use of this transcription is not specified, so be as precise as possible.',
+        graphic_instructions: jobRec.graphic_instructions,
+        describe: jobRec.describe,
+        tags: jobRec.tags
+      });
+      results.push(result);
+    }
+    const markdown = scrutinizeViaDiff2(results.map(r => r.markdown))
+    return {
+      // The main text from the fallback LLM:
+      markdown: markdown || '(No fallback output)',
+      isFirstPage: !!results[0].isFirstPage,
+      // If describe=true was given, we might get a short description
+      description: results[0].description || '',
+      // If tags were provided and matched, we might get them
+      tags: results[0].tags || []
+    };
+  } else {
+    throw Error(`unrecognized value for .scrutinize: ${jobRec.scrutinize}`)
+  }
 }
 
 /**
