@@ -254,6 +254,7 @@ POST /conversions/documents
 - **`file`** (multipart) **OR** `pdf_dataurl` (base64) — the PDF data.  
 - **`model`** (string, optional) — fallback LLM if OCR confidence is low or if boundary detection is needed.  
 - **`ocr_threshold`** (float, optional) — threshold for deciding fallback (default: `0.7`).  
+- **`scrutinize`** (string, optional) - Specify a method to scrutinize the image text.  (default: "none")
 - **`page_numbering`** (string, optional) — `"true"` or `"false"` (default: `"true"`)  
 - **`description`, `intent`, `graphic_instructions`** (optional) — context strings for fallback model.  
 - **`detect_document_boundaries`** (string, optional) — `"true"` or `"false"` (default: `"false"`)  
