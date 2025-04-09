@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "./node_modules/.bin/mocha --tags \"not:llm\" test/**/*.spec.mjs",
+    "test:all": "./node_modules/.bin/mocha  test/**/*.spec.mjs",
     "postinstall": "mkdir -p test/data && touch test/data/05-versions-space.pdf  # pdf-parse workaround"
   },
   "keywords": [],
@@ -32,5 +33,9 @@
     "tesseract.js": "^6.0.0",
     "tiktoken": "^1.0.18",
     "uuid": "^11.0.5"
+  },
+  "devDependencies": {
+    "mocha": "^11.1.0",
+    "mocha-tags-ultra": "^1.0.3"
   }
 }
