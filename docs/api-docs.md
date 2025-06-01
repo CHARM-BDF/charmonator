@@ -258,6 +258,7 @@ POST /conversions/documents
 - **`page_numbering`** (string, optional) — `"true"` or `"false"` (default: `"true"`)  
 - **`description`, `intent`, `graphic_instructions`** (optional) — context strings for fallback model.  
 - **`detect_document_boundaries`** (string, optional) — `"true"` or `"false"` (default: `"false"`)  
+- **`continue_on_failure`** (string, optional) — `"true"` or `"false"` (default: `"false"`) — when enabled, individual page failures (e.g., content filtering violations) create error placeholder pages rather than failing the entire job  
 
 #### Immediate Response
 
@@ -304,7 +305,12 @@ GET /conversions/documents/{jobId}/result
     "mimetype": "application/pdf",
     "document_sha256": "abcdef1234...",
     "size_bytes": 12345,
-    "originating_filename": "myfile.pdf"
+    "originating_filename": "myfile.pdf",
+    // Optional fields when continue_on_failure=true and some pages failed:
+    // "transcription_status": "partial",
+    // "pages_failed": 2,
+    // "pages_successful": 8,
+    // "continue_on_failure_used": true
   },
   "chunks": {
     "pages": [
@@ -325,6 +331,22 @@ GET /conversions/documents/{jobId}/result
           "description": "A short summary of what is on this page"
         }
       },
+      // Example of a failed page when continue_on_failure=true:
+      // {
+      //   "id": "abcdef1234.../pages@2",
+      //   "parent": "abcdef1234...",
+      //   "start": 2000,
+      //   "length": 600,
+      //   "content": "<!-- TRANSCRIPTION FAILURE -->\n# Transcription Failed\n...",
+      //   "metadata": {
+      //     "page_number": 3,
+      //     "text_extraction_method": "error_placeholder",
+      //     "extraction_confidence": 0,
+      //     "transcription_failed": true,
+      //     "error_type": "content_filter_violation",
+      //     "error_message": "Content was filtered due to policy violations"
+      //   }
+      // }
       // ...
     ]
   }

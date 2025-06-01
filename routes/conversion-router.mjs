@@ -249,8 +249,28 @@ router.post('/image', async (req, res) => {
 
   } catch (error) {
     console.error('Error during /conversion/image:', error);
+    
+    // Handle enhanced errors from providers
+    if (error.errorType && error.httpStatus && error.userMessage) {
+      // This is an enhanced error from a provider
+      const response = {
+        error: error.userMessage,
+        errorType: error.errorType,
+        provider: error.provider || 'unknown'
+      };
+      
+      // Add additional context for specific error types
+      if (error.errorType === 'content_filter_violation') {
+        response.details = 'The image content was flagged by content filtering policies. Please ensure the image contains appropriate content and try again.';
+      }
+      
+      return res.status(error.httpStatus).json(response);
+    }
+    
+    // Fallback for non-enhanced errors
     res.status(500).json({
-      error: error.message || 'An unexpected error occurred while transcribing the image.'
+      error: error.message || 'An unexpected error occurred while transcribing the image.',
+      errorType: 'unknown_error'
     });
   }
 });

@@ -31,6 +31,60 @@ function trunc(str, maxLen = 200) {
 }
 
 /**
+ * Create an error placeholder page when continue_on_failure is enabled
+ */
+function createErrorPage(pageIndex, error, jobRec) {
+  const pageNumber = pageIndex + 1;
+  const chunkId = `${jobRec.fileSha256}/pages@${pageIndex}`;
+  const timestamp = new Date().toISOString();
+  
+  const errorContent = `<!-- TRANSCRIPTION FAILURE -->
+<!-- This page failed to transcribe due to an error -->
+
+# Transcription Failed
+
+**Error Type:** ${error.name || 'Unknown'}
+**Error Message:** ${error.message || String(error)}
+**Timestamp:** ${timestamp}
+**Model:** ${jobRec.model || 'Unknown'}
+
+---
+
+*This content was generated because the --continue-on-failure flag was used and the transcription process encountered an error.*`;
+
+  const pageChunk = {
+    id: chunkId,
+    parent: jobRec.fileSha256,
+    start: 0, // Will be updated by caller
+    length: errorContent.length,
+    content: errorContent,
+    metadata: {
+      page_number: pageNumber,
+      text_extraction_method: 'error_placeholder',
+      extraction_confidence: 0,
+      model_name: jobRec.model,
+      isFirstPage: pageIndex === 0,
+      originating_filename: jobRec.originatingFilename || '',
+      originating_file_sha256: jobRec.fileSha256,
+      transcription_failed: true,
+      error_type: error.name || 'unknown',
+      error_message: error.message || String(error)
+    },
+    annotations: {
+      description: 'This page contains a transcription failure notice because the original transcription process failed.'
+    }
+  };
+
+  // Prepend metadata as comments
+  const metaComments = Object.entries(pageChunk.metadata)
+    .map(([k, v]) => `<!-- METADATA ${k}: ${v} -->`)
+    .join('\n');
+  pageChunk.content = `${metaComments}\n${pageChunk.content}`;
+
+  return pageChunk;
+}
+
+/**
  * Tesseract-based OCR function:
  * We use Tesseract’s data.confidence (range 0..100).
  */
@@ -169,7 +223,8 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       graphic_instructions,
       detect_document_boundaries = 'false',
       describe: describeParam = 'true',
-      tags: tagsParam
+      tags: tagsParam,
+      continue_on_failure = 'false'
     } = req.body;
 
     if (!model) {
@@ -235,6 +290,7 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       intent,
       graphic_instructions,
       detect_document_boundaries: String(detect_document_boundaries).toLowerCase() === 'true',
+      continue_on_failure: String(continue_on_failure).toLowerCase() === 'true',
       // Additional fields for describing / tagging
       describe,
       tags,
@@ -360,126 +416,140 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
     let previousPageImageDataUrl = null;
 
     for (let i = 0; i < numPages; i++) {
-      const converter = pdf2picFromPath(tmpPdfPath, {
-        density: 300,
-        saveFilename: `page_${i}_${jobRec.id}`,
-        savePath: 'uploads',
-        format: 'png',
-        width: 1536,
-        height: 1988
-      });
-      const output = await converter(i + 1); // pdf2pic is 1-based index
-      if (!output?.path) {
-        console.warn(`[processDocumentAsync] no path from pdf2pic for page ${i}`);
-        continue;
-      }
+      let pageChunk;
+      
+      try {
+        const converter = pdf2picFromPath(tmpPdfPath, {
+          density: 300,
+          saveFilename: `page_${i}_${jobRec.id}`,
+          savePath: 'uploads',
+          format: 'png',
+          width: 1536,
+          height: 1988
+        });
+        const output = await converter(i + 1); // pdf2pic is 1-based index
+        if (!output?.path) {
+          throw new Error(`No path from pdf2pic for page ${i}`);
+        }
 
-      // read as PNG
-      const image = await Jimp.read(output.path);
-      const pngBuffer = await image.getBuffer('image/png');
+        // read as PNG
+        const image = await Jimp.read(output.path);
+        const pngBuffer = await image.getBuffer('image/png');
 
-      // Tesseract OCR
-      const ocr = await ocrPageBuffer(pngBuffer);
-      let pageText = ocr.text;
-      let textMethod = 'ocr';
-      let confidence = ocr.qualityScore;
-      let fallbackModel = null;
+        // Tesseract OCR
+        const ocr = await ocrPageBuffer(pngBuffer);
+        let pageText = ocr.text;
+        let textMethod = 'ocr';
+        let confidence = ocr.qualityScore;
+        let fallbackModel = null;
 
-      // Possibly store fallback's short desc/tags if used:
-      let fallbackDescription = null;
-      let fallbackTags = null;
+        // Possibly store fallback's short desc/tags if used:
+        let fallbackDescription = null;
+        let fallbackTags = null;
 
-      // if confidence < threshold => fallback
-      let isFirstPageDetected = false;
-      if (confidence < jobRec.ocr_threshold) {
-        const fallbackResult = await fallbackVisionModel(
-          pngBuffer,
-          jobRec.model,
-          jobRec,
-          jobRec.detect_document_boundaries ? previousPageImageDataUrl : null
-        );
-        pageText = fallbackResult.markdown;
-        isFirstPageDetected = fallbackResult.isFirstPage;
-        textMethod = 'vision_model';
-        fallbackModel = jobRec.model;
+        // if confidence < threshold => fallback
+        let isFirstPageDetected = false;
+        if (confidence < jobRec.ocr_threshold) {
+          const fallbackResult = await fallbackVisionModel(
+            pngBuffer,
+            jobRec.model,
+            jobRec,
+            jobRec.detect_document_boundaries ? previousPageImageDataUrl : null
+          );
+          pageText = fallbackResult.markdown;
+          isFirstPageDetected = fallbackResult.isFirstPage;
+          textMethod = 'vision_model';
+          fallbackModel = jobRec.model;
 
-        fallbackDescription = fallbackResult.description || null;
-        fallbackTags = fallbackResult.tags || [];
+          fallbackDescription = fallbackResult.description || null;
+          fallbackTags = fallbackResult.tags || [];
 
-        confidence = Math.max(confidence, 0.9);
-      } else {
-        // if doc-boundary detection is on but no fallback for text
-        if (jobRec.detect_document_boundaries) {
-          if (i === 0) {
-            isFirstPageDetected = true;
-          } else {
-            const boundaryOnly = await fallbackVisionModel(
-              pngBuffer,
-              jobRec.model,
-              jobRec,
-              previousPageImageDataUrl
-            );
-            isFirstPageDetected = boundaryOnly.isFirstPage;
+          confidence = Math.max(confidence, 0.9);
+        } else {
+          // if doc-boundary detection is on but no fallback for text
+          if (jobRec.detect_document_boundaries) {
+            if (i === 0) {
+              isFirstPageDetected = true;
+            } else {
+              const boundaryOnly = await fallbackVisionModel(
+                pngBuffer,
+                jobRec.model,
+                jobRec,
+                previousPageImageDataUrl
+              );
+              isFirstPageDetected = boundaryOnly.isFirstPage;
 
-            if (boundaryOnly.description) {
-              fallbackDescription = boundaryOnly.description;
-            }
-            if (boundaryOnly.tags && boundaryOnly.tags.length > 0) {
-              fallbackTags = boundaryOnly.tags;
+              if (boundaryOnly.description) {
+                fallbackDescription = boundaryOnly.description;
+              }
+              if (boundaryOnly.tags && boundaryOnly.tags.length > 0) {
+                fallbackTags = boundaryOnly.tags;
+              }
             }
           }
         }
-      }
 
-      if (i === 0) {
-        isFirstPageDetected = true;
-      }
-
-      fs.promises.unlink(output.path).catch(() => {});
-
-      const chunkId = `${jobRec.fileSha256}/pages@${i}`;
-      const pageNumber = i + 1;
-
-      const pageChunk = {
-        id: chunkId,
-        parent: jobRec.fileSha256,
-        start: currentStart,
-        length: pageText.length,
-        content: pageText,
-        metadata: {
-          page_number: pageNumber,
-          text_extraction_method: textMethod,
-          extraction_confidence: parseFloat(confidence.toFixed(3)),
-          model_name: fallbackModel,
-          isFirstPage: isFirstPageDetected,
-          originating_filename: jobRec.originatingFilename || '',
-          // originating_filepath: jobRec.originatingFilepath || '',
-          originating_file_sha256: jobRec.fileSha256
+        if (i === 0) {
+          isFirstPageDetected = true;
         }
-      };
 
-      if (fallbackTags && fallbackTags.length > 0) {
-        pageChunk.metadata.tags = fallbackTags;
-      }
-      if (fallbackDescription) {
-        pageChunk.annotations = { description: fallbackDescription };
-      }
+        fs.promises.unlink(output.path).catch(() => {});
 
-      // Prepend metadata as comments
-      const metaComments = Object.entries(pageChunk.metadata)
-        .map(([k, v]) => `<!-- METADATA ${k}: ${v} -->`)
-        .join('\n');
-      pageChunk.content = `${metaComments}\n${pageChunk.content}`;
+        const chunkId = `${jobRec.fileSha256}/pages@${i}`;
+        const pageNumber = i + 1;
+
+        pageChunk = {
+          id: chunkId,
+          parent: jobRec.fileSha256,
+          start: currentStart,
+          length: pageText.length,
+          content: pageText,
+          metadata: {
+            page_number: pageNumber,
+            text_extraction_method: textMethod,
+            extraction_confidence: parseFloat(confidence.toFixed(3)),
+            model_name: fallbackModel,
+            isFirstPage: isFirstPageDetected,
+            originating_filename: jobRec.originatingFilename || '',
+            // originating_filepath: jobRec.originatingFilepath || '',
+            originating_file_sha256: jobRec.fileSha256
+          }
+        };
+
+        if (fallbackTags && fallbackTags.length > 0) {
+          pageChunk.metadata.tags = fallbackTags;
+        }
+        if (fallbackDescription) {
+          pageChunk.annotations = { description: fallbackDescription };
+        }
+
+        // Prepend metadata as comments
+        const metaComments = Object.entries(pageChunk.metadata)
+          .map(([k, v]) => `<!-- METADATA ${k}: ${v} -->`)
+          .join('\n');
+        pageChunk.content = `${metaComments}\n${pageChunk.content}`;
+
+        if (jobRec.detect_document_boundaries) {
+          const pageBase64 = pngBuffer.toString('base64');
+          previousPageImageDataUrl = `data:image/png;base64,${pageBase64}`;
+        }
+      } catch (pageError) {
+        console.error(`[Page ${i + 1}] Processing failed:`, pageError.message);
+        
+        if (jobRec.continue_on_failure) {
+          console.log(`[Page ${i + 1}] Creating error placeholder due to --continue-on-failure flag`);
+          pageChunk = createErrorPage(i, pageError, jobRec);
+          pageChunk.start = currentStart;
+        } else {
+          // Re-throw the error to maintain current behavior when flag not set
+          throw pageError;
+        }
+      }
 
       chunkPages.push(pageChunk);
       allTextPieces.push(pageChunk.content);
-      currentStart += pageText.length;
+      currentStart += pageChunk.length;
       jobRec.pages_converted = i + 1;
-
-      if (jobRec.detect_document_boundaries) {
-        const pageBase64 = pngBuffer.toString('base64');
-        previousPageImageDataUrl = `data:image/png;base64,${pageBase64}`;
-      }
     }
 
     await fs.promises.unlink(tmpPdfPath).catch(() => {});
@@ -487,6 +557,10 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
     const combinedContent = allTextPieces.join(
       jobRec.page_numbering ? "\n\n<!-- page boundary -->\n\n" : "\n\n"
     );
+
+    // Check if any pages failed transcription
+    const failedPages = chunkPages.filter(page => page.metadata.transcription_failed);
+    const hasFailedPages = failedPages.length > 0;
 
     const topLevelId = jobRec.fileSha256;
     const docObject = {
@@ -498,6 +572,12 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
         size_bytes: jobRec.fileBuffer.length,
         originating_filename: jobRec.originatingFilename || '',
         // originating_filepath: jobRec.originatingFilepath || ''
+        ...(hasFailedPages && {
+          transcription_status: 'partial',
+          pages_failed: failedPages.length,
+          pages_successful: chunkPages.length - failedPages.length,
+          continue_on_failure_used: jobRec.continue_on_failure
+        })
       },
       chunks: {
         pages: chunkPages
@@ -508,8 +588,47 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
     jobRec.finalDocObject = docObject;
     jobRec.status = 'complete';
   } catch (err) {
-    jobRec.status = 'error';
-    jobRec.error = `PDF processing failed: ${err.message}`;
+    if (jobRec.continue_on_failure) {
+      console.log(`[PDF Processing] Job failed, but continue_on_failure=true. Creating fallback document...`);
+      
+      // Create a fallback document with a single error page
+      const errorPage = createErrorPage(0, err, jobRec);
+      errorPage.start = 0;
+      
+      const combinedContent = errorPage.content;
+      const topLevelId = jobRec.fileSha256;
+      const docObject = {
+        id: topLevelId,
+        content: combinedContent,
+        metadata: {
+          mimetype: jobRec.fileMimetype,
+          document_sha256: jobRec.fileSha256,
+          size_bytes: jobRec.fileBuffer.length,
+          originating_filename: jobRec.originatingFilename || '',
+          transcription_status: 'failed',
+          pages_failed: jobRec.pages_total || 1,
+          pages_successful: 0,
+          continue_on_failure_used: jobRec.continue_on_failure,
+          transcription_error: {
+            error_type: 'job_error',
+            error_message: `PDF processing failed: ${err.message}`,
+            timestamp: new Date().toISOString(),
+            model_used: jobRec.model,
+            failure_point: 'job_processing'
+          }
+        },
+        chunks: {
+          pages: [errorPage]
+        }
+      };
+      
+      jobRec.fileBuffer = null;
+      jobRec.finalDocObject = docObject;
+      jobRec.status = 'complete';
+    } else {
+      jobRec.status = 'error';
+      jobRec.error = `PDF processing failed: ${err.message}`;
+    }
   }
 }
 
