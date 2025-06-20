@@ -185,7 +185,7 @@ function createJobRecord(extra) {
  */
 const upload = multer({
   dest: 'uploads/',
-  limits: { fileSize: 100 * 1024 * 1024 } // up to 100 MB
+  limits: { fileSize: 1000 * 1024 * 1024 } // up to 1000 MB
 });
 
 const router = express.Router();
