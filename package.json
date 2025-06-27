@@ -21,6 +21,7 @@
     "@babel/parser": "^7.26.5",
     "@babel/traverse": "^7.26.5",
     "@google/generative-ai": "^0.21.0",
+    "ajv": "^8.17.1",
     "axios": "^1.13.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

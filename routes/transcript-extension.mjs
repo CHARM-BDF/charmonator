@@ -6,8 +6,11 @@ import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 import { ToolKind, ToolDefinition } from '../lib/tool-definition.mjs';
 import { toolRegistry } from '../lib/tools.mjs';
 import { mcpManager } from '../lib/mcp/mcp-manager.mjs';
+import Ajv from 'ajv';
 
 const router = express.Router();
+
+const num_attempts_to_correct_schema_default = 5;
 
 router.post('/extension', async (req, res) => {
   console.log(JSON.stringify({
@@ -116,19 +119,64 @@ router.post('/extension', async (req, res) => {
       abort_signal: abortController.signal
     }
 
-    // Generate response
-    const suffix = await chatModel.extendTranscript(
-      incomingTranscript,
-      null,
-      null,
-      invocationOptions
-    );
+    // *** Loop for repair attempt of JSON Schema Structured Output.  Will return early for unstructured output. ***
+    const numAttempts = 1+(invocationOptions.num_attempts_to_correct_schema || num_attempts_to_correct_schema_default);
+    let validOutput = null;
+    let mostValidOutput = null;
+    let suffix = null;
+    for (let attempt = 0; attempt < numAttempts; attempt++) {
+      suffix = await chatModel.extendTranscript(
+        incomingTranscript,
+        null,
+        null,
+        invocationOptions
+      );
+      const schema = invocationOptions?.response_format?.json_schema?.schema;
+      if(!schema) {
+        // Bail out because we're not doing Structured Output
+        res.json(suffix.toJSON())
+        return;
+      }
+      const data = JSON.parse(suffix.toJSON().messages[0].content)
+      const isValid = validateAgainstSchema(data, schema);
+      /*
+      // Example of how to exercise "attempting repair"
+      const schema2 = JSON.parse(JSON.stringify(schema))
+      delete schema2['items']['properties'].current_usage_status;
+      const isValid = validateAgainstSchema(data, schema2);
+      */
+      if (isValid) {
+        validOutput = suffix.toJSON();
+        break;
+      } else if (attempt < (numAttempts - 1)) {
+        mostValidOutput = data;
+        console.log(JSON.stringify({"event": "attempting repair", attempt, numAttempts, "data":suffix.toJSON()}))
+        const incorrectResponse = JSON.stringify(suffix.toJSON(), null, 2);
+        invocationOptions.repairs = `
+          We have tried to use Structured Output to decode the following JSON Response.
+          However, the Response does not yet correspond to its JsonSchema.
+          Fix the Response so that it is fully valid according to JsonSchema, while preserving as much of its content as is reasonably possible.
+          <Response>
+          \`\`\`json
+          ${incorrectResponse}
+          \`\`\`
+          </Response>
+        `;
+      }
+    }
 
-    // Return the suffix as JSON
     if (abortController.signal.aborted || res.destroyed) {
       return;
     }
-    return res.json(suffix.toJSON());
+    if (validOutput) {
+      return res.json(validOutput);
+    }
+    // 422, Unprocessable Content, https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/422
+    return res.status(422).json({
+      error: 'The response could not be validated after multiple attempts.',
+      mostValidOutput,
+      finalResponse: suffix ? suffix.toJSON() : null
+    });
 
   } catch (err) {
     if (abortController.signal.aborted) {
@@ -139,11 +187,19 @@ router.post('/extension', async (req, res) => {
       stack: err.stack,
       errJson: j
     })
+    // Expand all inner objects to a depth of 10 for debugging:
+    console.error('Transcript', JSON.stringify(transcriptCopy, null, 10));
     return res.status(500).json(j);
   } finally {
     req.off('aborted', onDisconnect);
     res.off('close', onDisconnect);
   }
 });
+
+function validateAgainstSchema(response, schema) {
+  const ajv = new Ajv();
+  const validate = ajv.compile(schema);
+  return validate(response);
+}
 
 export default router;
