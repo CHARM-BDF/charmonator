@@ -17,6 +17,9 @@ import { setGlobalConfigFile, getConfig, getServerPort, getBaseUrl, getFullCharm
 import { loadToolDefinitionsFromConfig, initModelTools } from './lib/tool-loader.mjs';
 import { toolRegistry } from './lib/tools.mjs';
 
+// For handling modular apps:
+import { loadAppsFromConfig, mountApps } from './lib/app-loader.mjs';
+
 import embeddingRouter from './routes/embedding.mjs';
 import transcriptExtensionRouter from './routes/transcript-extension.mjs';
 import listModelsRouter from './routes/list-models.mjs';
@@ -65,7 +68,11 @@ async function main() {
     await initModelTools(config, definitions);
     console.log('All Registered Tools:', Array.from(toolRegistry.tools.keys()));
 
-    // 4) Now proceed with server setup:
+    // 4) Load modular apps
+    await loadAppsFromConfig(config);
+    console.log('Apps loaded successfully');
+
+    // 5) Now proceed with server setup:
     const BASE_URL = getBaseUrl();
     const CHARMONATOR_API_PREFIX = getFullCharmonatorApiPrefix();
     const CHARMONIZER_API_PREFIX = getFullCharmonizerApiPrefix();
@@ -135,6 +142,9 @@ async function main() {
 
     app.use(CHARMONATOR_API_PREFIX + "/transcript", transcriptExtensionRouter);
     app.use(CHARMONATOR_API_PREFIX + "/conversion", charmonatorConversionRouter);
+
+    // Mount modular apps (routes and static files)
+    mountApps(app);
 
     // Charmonizer document conversion routes:
     app.use(CHARMONIZER_API_PREFIX + "/conversions", documentConversionsRouter);
