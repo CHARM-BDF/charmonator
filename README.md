@@ -124,6 +124,10 @@ There are two web app playgrounds to test demonstrate these APIs:
 
 These are available when you start the server and navigate to (`http://localhost:5002/charm/`)[http://localhost:5002/charm/], assuming you have /charm/ as the base path prefix and 5002 as the port in you configuration.
 
+## Related Projects
+
+For practical examples and ready-to-use applications built on Charmonator, see the **[Charmonator Apps Examples](https://github.com/mattmight/charmonator-apps-examples)** repository, which contains a collection of modular applications including clinical trial matchers, medical record chat interfaces, and health assessment tools.
+
 
 
 <a name="configuration-management"></a>
