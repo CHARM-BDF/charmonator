@@ -65,8 +65,8 @@ router.post('/extension', async (req, res) => {
       max_attempts
     }
 
+    // *** Loop for repair attempt of JSON Schema Structured Output.  Will return early for unstructured output. ***
     const numAttempts = 1+(invocationOptions.num_attempts_to_correct_schema || 0);
-
     let validOutput = null;
     let mostValidOutput = null;
     let suffix = null;
@@ -79,6 +79,7 @@ router.post('/extension', async (req, res) => {
       );
       const schema = invocationOptions?.response_format?.json_schema?.schema;
       if(!schema) {
+        // Bail out because we're not doing Structured Output
         res.json(suffix.toJSON())
         return;
       }
