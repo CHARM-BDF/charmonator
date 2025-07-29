@@ -67,7 +67,7 @@ router.post('/extension', async (req, res) => {
 
     const numAttempts = 1+(invocationOptions.num_attempts_to_correct_schema || 0);
 
-    let validResponse = null;
+    let validOutput = null;
     let suffix = null;
     for (let attempt = 0; attempt < numAttempts; attempt++) {
       suffix = await chatModel.extendTranscript(
@@ -80,7 +80,7 @@ router.post('/extension', async (req, res) => {
       const data = JSON.parse(suffix.toJSON().messages[0].content)
       const isValid = validateAgainstSchema(data, schema);
       if (isValid) {
-        validResponse = suffix.toJSON();
+        validOutput = suffix.toJSON();
         break;
       } else if (attempt < (numAttempts - 1)) {
         const incorrectResponse = JSON.stringify(suffix.toJSON(), null, 2);
@@ -97,8 +97,8 @@ router.post('/extension', async (req, res) => {
       }
     }
 
-    if (validResponse) {
-      res.json(validResponse)
+    if (validOutput) {
+      res.json(validOutput)
     }
     else if (suffix) {
       res.json(suffix.toJSON());
