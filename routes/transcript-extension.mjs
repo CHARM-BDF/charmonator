@@ -68,6 +68,7 @@ router.post('/extension', async (req, res) => {
     const numAttempts = 1+(invocationOptions.num_attempts_to_correct_schema || 0);
 
     let validOutput = null;
+    let mostValidOutput = null;
     let suffix = null;
     for (let attempt = 0; attempt < numAttempts; attempt++) {
       suffix = await chatModel.extendTranscript(
@@ -83,6 +84,7 @@ router.post('/extension', async (req, res) => {
         validOutput = suffix.toJSON();
         break;
       } else if (attempt < (numAttempts - 1)) {
+        mostValidOutput = data;
         const incorrectResponse = JSON.stringify(suffix.toJSON(), null, 2);
         invocationOptions.repairs = `
           We have tried to use Structured Output to decode the following JSON Response.
@@ -99,12 +101,13 @@ router.post('/extension', async (req, res) => {
 
     if (validOutput) {
       res.json(validOutput)
-    }
-    else if (suffix) {
-      res.json(suffix.toJSON());
     } else {
       // 422, Unprocessable Content, https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/422
-      res.status(422).json({"error":'The response could not be validated after multiple attempts.'});
+      res.status(422).json({
+        'error': 'The response could not be validated after multiple attempts.',
+        'mostValidOutput': mostValidOutput,
+        'finalResponse': suffix ? suffix.toJSON() : null
+      });
     }
     return res.json(validResponse || suffix.toJSON());
 
