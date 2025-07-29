@@ -77,7 +77,11 @@ router.post('/extension', async (req, res) => {
         null,
         invocationOptions
       );
-      const schema = invocationOptions.response_format.json_schema.schema;
+      const schema = invocationOptions?.response_format?.json_schema?.schema;
+      if(!schema) {
+        res.json(suffix.toJSON())
+        return;
+      }
       const data = JSON.parse(suffix.toJSON().messages[0].content)
       const isValid = validateAgainstSchema(data, schema);
       /*
