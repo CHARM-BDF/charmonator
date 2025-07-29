@@ -65,7 +65,7 @@ router.post('/extension', async (req, res) => {
       max_attempts
     }
 
-    const numAttempts = invocationOptions.num_attempts_to_correct_schema || 0;
+    const numAttempts = 1+(invocationOptions.num_attempts_to_correct_schema || 0);
 
     let validResponse = null;
     let suffix = null;
@@ -97,8 +97,14 @@ router.post('/extension', async (req, res) => {
       }
     }
 
-    if (!validResponse) {
-      console.warn('The response could not be validated after multiple attempts.');
+    if (validResponse) {
+      res.json(validResponse)
+    }
+    else if (suffix) {
+      res.json(suffix.toJSON());
+    } else {
+      // 422, Unprocessable Content, https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/422
+      res.status(422).json({"error":'The response could not be validated after multiple attempts.'});
     }
     return res.json(validResponse || suffix.toJSON());
 
@@ -108,6 +114,8 @@ router.post('/extension', async (req, res) => {
       stack: err.stack,
       errJson: j
     })
+    // Expand all inner objects to a depth of 10 for debugging:
+    console.error('Transcript', JSON.stringify(transcriptCopy, null, 10));
     return res.status(500).json(j);
   }
 });
