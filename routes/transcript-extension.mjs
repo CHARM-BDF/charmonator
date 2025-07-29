@@ -80,6 +80,12 @@ router.post('/extension', async (req, res) => {
       const schema = invocationOptions.response_format.json_schema.schema;
       const data = JSON.parse(suffix.toJSON().messages[0].content)
       const isValid = validateAgainstSchema(data, schema);
+      /*
+      // Example of how to exercise "attempting repair"
+      const schema2 = JSON.parse(JSON.stringify(schema))
+      delete schema2['items']['properties'].current_usage_status;
+      const isValid = validateAgainstSchema(data, schema2);
+      */
       if (isValid) {
         validOutput = suffix.toJSON();
         break;
