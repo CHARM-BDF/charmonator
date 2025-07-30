@@ -8,6 +8,8 @@ import Ajv from 'ajv';
 
 const router = express.Router();
 
+const num_attempts_to_correct_schema_default = 5;
+
 router.post('/extension', async (req, res) => {
   let transcriptCopy = null;
   try {
@@ -66,7 +68,7 @@ router.post('/extension', async (req, res) => {
     }
 
     // *** Loop for repair attempt of JSON Schema Structured Output.  Will return early for unstructured output. ***
-    const numAttempts = 1+(invocationOptions.num_attempts_to_correct_schema || 0);
+    const numAttempts = 1+(invocationOptions.num_attempts_to_correct_schema || num_attempts_to_correct_schema_default);
     let validOutput = null;
     let mostValidOutput = null;
     let suffix = null;
