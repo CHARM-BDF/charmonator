@@ -78,6 +78,15 @@
       <div class="dot-flashing"></div>
     </div>
 
+    <!-- Debug Error Display (only visible when #debug is in URL) -->
+    <div id="debugErrorDisplay" class="debug-error-display hidden">
+      <div class="debug-header">
+        <h3>Debug Console</h3>
+        <button id="clearDebugBtn" class="clear-debug-btn">Clear</button>
+      </div>
+      <div id="debugErrors" class="debug-errors"></div>
+    </div>
+
     <!-- Chat Footer -->
     <footer class="chat-footer">
       
@@ -113,6 +122,99 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.0/purify.min.js"
     integrity="sha512-/hVAZO5POxCKdZMSLefw30xEVwjm94PAV9ynjskGbIpBvHO9EBplEcdUlBdCKutpZsF+La8Ag4gNrG0gAOn3Ig=="
     crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <!-- Debug Mode Script -->
+  <script>
+    // Debug mode functionality - runs before main script
+    (function() {
+      // Check if debug mode is enabled via URL hash
+      const isDebugMode = window.location.hash === '#debug';
+      
+      if (isDebugMode) {
+        // Show the debug error display
+        document.addEventListener('DOMContentLoaded', function() {
+          const debugDisplay = document.getElementById('debugErrorDisplay');
+          if (debugDisplay) {
+            debugDisplay.classList.remove('hidden');
+          }
+          
+          // Add clear button functionality
+          const clearBtn = document.getElementById('clearDebugBtn');
+          if (clearBtn) {
+            clearBtn.addEventListener('click', function() {
+              const debugErrors = document.getElementById('debugErrors');
+              if (debugErrors) {
+                debugErrors.innerHTML = '';
+              }
+            });
+          }
+        });
+        
+        // Function to add error to debug display
+        function addDebugError(message, stack, timestamp) {
+          const debugErrors = document.getElementById('debugErrors');
+          if (!debugErrors) return;
+          
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'debug-error';
+          
+          errorDiv.innerHTML = `
+            <div class="debug-error-timestamp">${timestamp}</div>
+            <div class="debug-error-message">${message}</div>
+            <div class="debug-error-stack">${stack || 'No stack trace available'}</div>
+          `;
+          
+          debugErrors.appendChild(errorDiv);
+          debugErrors.scrollTop = debugErrors.scrollHeight;
+        }
+        
+        // Override console.error to capture errors
+        const originalConsoleError = console.error;
+        console.error = function(...args) {
+          originalConsoleError.apply(console, args);
+          const timestamp = new Date().toLocaleTimeString();
+          const message = args.map(arg => 
+            typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+          ).join(' ');
+          addDebugError('Console Error: ' + message, '', timestamp);
+        };
+        
+        // Capture unhandled errors
+        window.addEventListener('error', function(event) {
+          const timestamp = new Date().toLocaleTimeString();
+          addDebugError(
+            event.message,
+            `File: ${event.filename}\nLine: ${event.lineno}:${event.colno}\nStack: ${event.error?.stack || 'N/A'}`,
+            timestamp
+          );
+        });
+        
+        // Capture unhandled promise rejections
+        window.addEventListener('unhandledrejection', function(event) {
+          const timestamp = new Date().toLocaleTimeString();
+          addDebugError(
+            'Unhandled Promise Rejection: ' + event.reason,
+            event.reason?.stack || '',
+            timestamp
+          );
+        });
+        
+        // Add a debug log function for manual logging
+        window.debugLog = function(message, data = null) {
+          const timestamp = new Date().toLocaleTimeString();
+          const fullMessage = data ? `${message}: ${JSON.stringify(data, null, 2)}` : message;
+          addDebugError('Debug Log: ' + fullMessage, '', timestamp);
+        };
+        
+        // Log that debug mode is active
+        setTimeout(() => {
+          if (document.getElementById('debugErrors')) {
+            addDebugError('Debug mode active', 'Monitoring JavaScript errors and console output', new Date().toLocaleTimeString());
+          }
+        }, 100);
+      }
+    })();
+  </script>
 
   <!-- Include script.js -->
   <script type="module" src="./script.js"></script>
