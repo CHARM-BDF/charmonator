@@ -52,7 +52,19 @@ let pendingAttachments = [];
 let hash_encoded = window.location.hash.slice(1);
 let hash_params = {};
 if (hash_encoded) {
-  hash_params = JSON.parse(atob(hash_encoded));
+  // Handle simple hash values like #debug
+  if (hash_encoded === 'debug') {
+    hash_params = { debug: true };
+  } else {
+    // Try to decode as base64 JSON, with error handling
+    try {
+      hash_params = JSON.parse(atob(hash_encoded));
+    } catch (error) {
+      console.warn('Failed to decode hash as base64 JSON:', error.message);
+      console.warn('Hash value:', hash_encoded);
+      hash_params = {};
+    }
+  }
 }
 console.log("base64-encoded hash params:", hash_params);
 
