@@ -62,6 +62,9 @@ if (hash_encoded) {
     } catch (error) {
       console.warn('Failed to decode hash as base64 JSON:', error.message);
       console.warn('Hash value:', hash_encoded);
+      if (window.debugLog) {
+        window.debugLog('Hash parameter parsing failed', { error: error.message, hash: hash_encoded });
+      }
       hash_params = {};
     }
   }
@@ -143,6 +146,9 @@ async function loadAvailableModels() {
 
   } catch (error) {
     console.error('Error loading models:', error);
+    if (window.debugLog) {
+      window.debugLog('Model loading failed', { error: error.message, stack: error.stack });
+    }
     const errorOption = document.createElement('option');
     errorOption.textContent = 'Error loading models';
     errorOption.disabled = true;
@@ -168,6 +174,9 @@ async function setModel(modelId) {
     }
   } catch (error) {
     console.error('Error setting model:', error);
+    if (window.debugLog) {
+      window.debugLog('Model setting failed', { modelId, error: error.message });
+    }
     activeModelDisplay.textContent = `Model: ${modelId}`;
   }
 }
@@ -268,6 +277,9 @@ function addMessage(content, role) {
       })
       .catch((err) => {
         console.error('Failed to copy: ', err);
+        if (window.debugLog) {
+          window.debugLog('Clipboard copy failed', { error: err.message });
+        }
         if (copyBtnContainer) {
           copyBtnContainer.style.display = 'flex';
         }
@@ -291,6 +303,9 @@ function addMessage(content, role) {
         alert('Code copied to clipboard!');
       }).catch((err) => {
         console.error('Failed to copy code: ', err);
+        if (window.debugLog) {
+          window.debugLog('Code copy to clipboard failed', { error: err.message });
+        }
       });
     });
     codeBlock.parentElement.insertBefore(copyBtn, codeBlock);
@@ -310,11 +325,19 @@ function validateFile(file) {
   const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
 
   if (!allowedUploadExtensions.includes(ext)) {
-    alert(`File extension not allowed: ${file.name}`);
+    const message = `File extension not allowed: ${file.name}`;
+    alert(message);
+    if (window.debugLog) {
+      window.debugLog('File validation failed', { fileName: file.name, extension: ext, reason: 'extension not allowed' });
+    }
     return false;
   }
   if (file.size > maxFileSize) {
-    alert(`File is too large (max 50 MB): ${file.name}`);
+    const message = `File is too large (max 50 MB): ${file.name}`;
+    alert(message);
+    if (window.debugLog) {
+      window.debugLog('File validation failed', { fileName: file.name, fileSize: file.size, maxSize: maxFileSize, reason: 'file too large' });
+    }
     return false;
   }
   return true;
@@ -330,7 +353,12 @@ async function uploadAndConvertImageFile(file) {
       // e.target.result is "data:image/jpeg;base64,...."
       resolve(e.target.result);
     };
-    reader.onerror = (err) => reject(err);
+    reader.onerror = (err) => {
+      if (window.debugLog) {
+        window.debugLog('FileReader error', { error: err, fileName: file?.name });
+      }
+      reject(err);
+    };
     reader.readAsDataURL(file);
   });
 }
@@ -352,11 +380,18 @@ async function uploadAndConvertDocFile(file) {
       return data.markdownContent;
     } else {
       const errorData = await response.json();
-      alert(`Error converting file: ${errorData.error}`);
+      const message = `Error converting file: ${errorData.error}`;
+      alert(message);
+      if (window.debugLog) {
+        window.debugLog('File conversion API error', { fileName: file?.name, status: response.status, error: errorData.error });
+      }
       return null;
     }
   } catch (error) {
     console.error('Error uploading file:', error);
+    if (window.debugLog) {
+      window.debugLog('File upload/conversion failed', { fileName: file?.name, error: error.message, stack: error.stack });
+    }
     alert('An error occurred while uploading the file.');
     return null;
   }
@@ -403,7 +438,12 @@ fileInput.addEventListener('change', async (e) => {
     // Check if it's an image extension
     if (['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) {
       const dataUrl = await uploadAndConvertImageFile(file);
-      if (!dataUrl) continue;
+      if (!dataUrl) {
+        if (window.debugLog) {
+          window.debugLog('File input image processing failed', { fileName: file.name, extension: ext });
+        }
+        continue;
+      }
       attachmentObj = {
         type: 'image',
         fileName: file.name,
@@ -412,7 +452,12 @@ fileInput.addEventListener('change', async (e) => {
     } else {
       // Convert text/doc to markdown
       const mdText = await uploadAndConvertDocFile(file);
-      if (!mdText) continue;
+      if (!mdText) {
+        if (window.debugLog) {
+          window.debugLog('File input document processing failed', { fileName: file.name, extension: ext });
+        }
+        continue;
+      }
       attachmentObj = {
         type: 'document',
         fileName: file.name,
@@ -456,7 +501,12 @@ dropArea.addEventListener('drop', async (e) => {
 
     if (['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) {
       const dataUrl = await uploadAndConvertImageFile(file);
-      if (!dataUrl) continue;
+      if (!dataUrl) {
+        if (window.debugLog) {
+          window.debugLog('Drag & drop image processing failed', { fileName: file.name, extension: ext });
+        }
+        continue;
+      }
       attachmentObj = {
         type: 'image',
         fileName: file.name,
@@ -465,7 +515,12 @@ dropArea.addEventListener('drop', async (e) => {
     } else {
       // doc
       const mdText = await uploadAndConvertDocFile(file);
-      if (!mdText) continue;
+      if (!mdText) {
+        if (window.debugLog) {
+          window.debugLog('Drag & drop document processing failed', { fileName: file.name, extension: ext });
+        }
+        continue;
+      }
       attachmentObj = {
         type: 'document',
         fileName: file.name,
@@ -581,6 +636,14 @@ async function sendMessage() {
     }
   } catch (error) {
     console.error(error);
+    if (window.debugLog) {
+      window.debugLog('Message sending failed', { 
+        error: error.message, 
+        stack: error.stack,
+        model: modelSelect.value,
+        attachments: pendingAttachments.length
+      });
+    }
     addMessage(`Error: ${error.message}`, 'assistant');
   } finally {
     hideThinkingIndicator();
