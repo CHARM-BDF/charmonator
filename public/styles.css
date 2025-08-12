@@ -631,11 +631,41 @@ pre {
   margin-bottom: 4px;
 }
 
-.debug-error-stack {
+.debug-error-details {
   color: #ccc;
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.debug-error-full-content {
+  max-height: 300px;
+  overflow-y: auto;
+  background-color: #1a1a1a;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #444;
+  margin-top: 4px;
+}
+
+.debug-expand-btn {
+  background: #4a4a4a;
+  border: 1px solid #666;
+  border-radius: 4px;
+  color: #fff;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 10px;
+  margin-top: 4px;
+  transition: background-color 0.2s;
+}
+
+.debug-expand-btn:hover {
+  background: #5a5a5a;
+}
+
+.debug-error-details.expandable {
+  position: relative;
 }
 
 /* Mobile adjustments for debug display */

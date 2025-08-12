@@ -151,18 +151,57 @@
         });
         
         // Function to add error to debug display
-        function addDebugError(message, stack, timestamp) {
+        function addDebugError(message, details, timestamp) {
           const debugErrors = document.getElementById('debugErrors');
           if (!debugErrors) return;
           
           const errorDiv = document.createElement('div');
           errorDiv.className = 'debug-error';
           
+          // Handle different types of details (string, object, or error)
+          let detailsContent = '';
+          let expandable = false;
+          
+          if (details && typeof details === 'object') {
+            detailsContent = JSON.stringify(details, null, 2);
+            expandable = detailsContent.length > 200;
+          } else if (details && typeof details === 'string') {
+            detailsContent = details;
+            expandable = detailsContent.length > 200;
+          } else {
+            detailsContent = details || 'No additional details';
+          }
+          
+          const truncatedDetails = expandable ? detailsContent.substring(0, 200) + '...' : detailsContent;
+          
           errorDiv.innerHTML = `
             <div class="debug-error-timestamp">${timestamp}</div>
             <div class="debug-error-message">${message}</div>
-            <div class="debug-error-stack">${stack || 'No stack trace available'}</div>
+            <div class="debug-error-details ${expandable ? 'expandable' : ''}">
+              <div class="debug-error-content ${expandable ? 'collapsed' : ''}">${expandable ? truncatedDetails : detailsContent}</div>
+              ${expandable ? `<div class="debug-error-full-content" style="display: none;">${detailsContent}</div>` : ''}
+              ${expandable ? '<button class="debug-expand-btn">Show Full Details</button>' : ''}
+            </div>
           `;
+          
+          // Add click handler for expand button
+          if (expandable) {
+            const expandBtn = errorDiv.querySelector('.debug-expand-btn');
+            const collapsedContent = errorDiv.querySelector('.debug-error-content.collapsed');
+            const fullContent = errorDiv.querySelector('.debug-error-full-content');
+            
+            expandBtn.addEventListener('click', () => {
+              if (fullContent.style.display === 'none') {
+                collapsedContent.style.display = 'none';
+                fullContent.style.display = 'block';
+                expandBtn.textContent = 'Show Less';
+              } else {
+                collapsedContent.style.display = 'block';
+                fullContent.style.display = 'none';
+                expandBtn.textContent = 'Show Full Details';
+              }
+            });
+          }
           
           debugErrors.appendChild(errorDiv);
           debugErrors.scrollTop = debugErrors.scrollHeight;

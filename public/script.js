@@ -120,11 +120,44 @@ const savedModel = localStorage.getItem('selectedModel') || 'o1';
 // Fetch / populate model list
 async function loadAvailableModels() {
   console.log("Available models loading...");
+  let response;
   try {
-    const response = await fetch('./api/charmonator/v1/models');
-    if (!response.ok) {
-      throw new Error('Failed to fetch models');
+    response = await fetch('./api/charmonator/v1/models');
+    
+    // Capture full response details for debugging
+    const responseDetails = {
+      url: response.url,
+      status: response.status,
+      statusText: response.statusText,
+      headers: {}
+    };
+    
+    // Capture response headers
+    for (const [key, value] of response.headers.entries()) {
+      responseDetails.headers[key] = value;
     }
+    
+    if (!response.ok) {
+      // Try to get the response text/HTML (might be an error page)
+      let responseText = '';
+      try {
+        responseText = await response.text();
+      } catch (textError) {
+        responseText = 'Unable to read response body';
+      }
+      
+      const errorDetails = {
+        ...responseDetails,
+        responseBody: responseText
+      };
+      
+      if (window.debugLog) {
+        window.debugLog('Model loading HTTP error', errorDetails);
+      }
+      
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
     const data = await response.json();
     
     modelSelect.innerHTML = '';
@@ -144,11 +177,35 @@ async function loadAvailableModels() {
       setModel(data.models[0].id);
     }
 
+    if (window.debugLog) {
+      window.debugLog('Models loaded successfully', { 
+        count: data.models.length,
+        models: data.models.map(m => ({ id: m.id, name: m.name }))
+      });
+    }
+
   } catch (error) {
     console.error('Error loading models:', error);
-    if (window.debugLog) {
-      window.debugLog('Model loading failed', { error: error.message, stack: error.stack });
+    
+    const errorDetails = {
+      error: error.message,
+      stack: error.stack,
+      url: './api/charmonator/v1/models',
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Add response details if we have them
+    if (response) {
+      errorDetails.httpStatus = response.status;
+      errorDetails.httpStatusText = response.statusText;
+      errorDetails.responseUrl = response.url;
     }
+    
+    if (window.debugLog) {
+      window.debugLog('Model loading failed', errorDetails);
+    }
+    
     const errorOption = document.createElement('option');
     errorOption.textContent = 'Error loading models';
     errorOption.disabled = true;
@@ -160,6 +217,28 @@ document.addEventListener('DOMContentLoaded', loadAvailableModels);
 async function setModel(modelId) {
   try {
     const response = await fetch('./api/charmonator/v1/models');
+    
+    if (!response.ok) {
+      let responseText = '';
+      try {
+        responseText = await response.text();
+      } catch (textError) {
+        responseText = 'Unable to read response body';
+      }
+      
+      if (window.debugLog) {
+        window.debugLog('SetModel HTTP error', {
+          modelId,
+          status: response.status,
+          statusText: response.statusText,
+          url: response.url,
+          responseBody: responseText
+        });
+      }
+      
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
     const data = await response.json();
     const model = data.models.find(m => m.id === modelId);
     
@@ -171,11 +250,22 @@ async function setModel(modelId) {
       activeModelDisplay.title = model.description;
     } else {
       activeModelDisplay.textContent = `Model: ${modelId}`;
+      if (window.debugLog) {
+        window.debugLog('Model not found in list', { 
+          requestedModelId: modelId, 
+          availableModels: data.models.map(m => m.id) 
+        });
+      }
     }
   } catch (error) {
     console.error('Error setting model:', error);
     if (window.debugLog) {
-      window.debugLog('Model setting failed', { modelId, error: error.message });
+      window.debugLog('Model setting failed', { 
+        modelId, 
+        error: error.message,
+        stack: error.stack,
+        userAgent: navigator.userAgent
+      });
     }
     activeModelDisplay.textContent = `Model: ${modelId}`;
   }
