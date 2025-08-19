@@ -8,6 +8,10 @@ import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 const router = express.Router();
 
 router.post('/extension', async (req, res) => {
+  console.log(JSON.stringify({
+    "event":"request",
+    "url":"/transcript/extension"+req.url,
+    "body":req.body}))
   let transcriptCopy = null;
   try {
     const {

@@ -869,6 +869,10 @@ const router = express.Router();
  *   - tokens_per_word: (number) optional, tokens per word ratio (default: 1.33)
  */
 router.post('/', async (req, res) => {
+  console.log(JSON.stringify({
+    "event":"request",
+    "url":"/summaries"+req.url,
+    "body":req.body}))
   try {
     let {
       document,

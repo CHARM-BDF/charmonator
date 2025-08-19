@@ -161,6 +161,10 @@ const router = express.Router();
  *  }
  */
 router.post('/', async (req, res) => {
+  console.log(JSON.stringify({
+    "event":"request",
+    "url":"/chunkings"+req.url,
+    "body":req.body}))
   try {
     const {
       document,
