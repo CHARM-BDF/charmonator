@@ -164,15 +164,15 @@
           
           if (details && typeof details === 'object') {
             detailsContent = JSON.stringify(details, null, 2);
-            expandable = detailsContent.length > 200;
+            expandable = detailsContent.length > 500; // Increased from 200 to 500
           } else if (details && typeof details === 'string') {
             detailsContent = details;
-            expandable = detailsContent.length > 200;
+            expandable = detailsContent.length > 500; // Increased from 200 to 500
           } else {
             detailsContent = details || 'No additional details';
           }
           
-          const truncatedDetails = expandable ? detailsContent.substring(0, 200) + '...' : detailsContent;
+          const truncatedDetails = expandable ? detailsContent.substring(0, 500) + '...' : detailsContent;
           
           errorDiv.innerHTML = `
             <div class="debug-error-timestamp">${timestamp}</div>
