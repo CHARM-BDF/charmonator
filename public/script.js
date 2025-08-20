@@ -121,6 +121,7 @@ const savedModel = localStorage.getItem('selectedModel') || 'o1';
 async function loadAvailableModels() {
   console.log("Available models loading...");
   let response;
+  let rawResponseText = '';
   try {
     response = await fetch('./api/charmonator/v1/models');
     
@@ -137,18 +138,30 @@ async function loadAvailableModels() {
       responseDetails.headers[key] = value;
     }
     
-    if (!response.ok) {
-      // Try to get the response text/HTML (might be an error page)
-      let responseText = '';
-      try {
-        responseText = await response.text();
-      } catch (textError) {
-        responseText = 'Unable to read response body';
+    // Get raw response text FIRST for debugging (before parsing as JSON)
+    try {
+      rawResponseText = await response.text();
+      if (window.debugLog) {
+        window.debugLog('Raw response from /api/charmonator/v1/models', {
+          ...responseDetails,
+          rawResponseText: rawResponseText,
+          responseLength: rawResponseText.length
+        });
       }
-      
+    } catch (textError) {
+      rawResponseText = 'Unable to read response body';
+      if (window.debugLog) {
+        window.debugLog('Failed to read raw response text', { 
+          ...responseDetails, 
+          textError: textError.message 
+        });
+      }
+    }
+    
+    if (!response.ok) {
       const errorDetails = {
         ...responseDetails,
-        responseBody: responseText
+        responseBody: rawResponseText
       };
       
       if (window.debugLog) {
@@ -158,7 +171,27 @@ async function loadAvailableModels() {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
     
-    const data = await response.json();
+    // Now try to parse the raw text as JSON
+    let data;
+    try {
+      data = JSON.parse(rawResponseText);
+      if (window.debugLog) {
+        window.debugLog('Successfully parsed JSON response', {
+          parsedData: data,
+          rawTextLength: rawResponseText.length
+        });
+      }
+    } catch (parseError) {
+      if (window.debugLog) {
+        window.debugLog('JSON parse error', {
+          parseError: parseError.message,
+          rawResponseText: rawResponseText,
+          responseLength: rawResponseText.length,
+          responseHeaders: responseDetails.headers
+        });
+      }
+      throw new Error(`Failed to parse JSON response: ${parseError.message}`);
+    }
     
     modelSelect.innerHTML = '';
     
@@ -215,31 +248,70 @@ async function loadAvailableModels() {
 document.addEventListener('DOMContentLoaded', loadAvailableModels);
 
 async function setModel(modelId) {
+  let rawResponseText = '';
   try {
     const response = await fetch('./api/charmonator/v1/models');
     
-    if (!response.ok) {
-      let responseText = '';
-      try {
-        responseText = await response.text();
-      } catch (textError) {
-        responseText = 'Unable to read response body';
+    // Get raw response text FIRST for debugging
+    try {
+      rawResponseText = await response.text();
+      if (window.debugLog) {
+        window.debugLog('Raw response from /api/charmonator/v1/models (setModel)', {
+          modelId,
+          status: response.status,
+          statusText: response.statusText,
+          url: response.url,
+          rawResponseText: rawResponseText,
+          responseLength: rawResponseText.length
+        });
       }
-      
+    } catch (textError) {
+      rawResponseText = 'Unable to read response body';
+      if (window.debugLog) {
+        window.debugLog('Failed to read raw response text (setModel)', { 
+          modelId,
+          status: response.status,
+          textError: textError.message 
+        });
+      }
+    }
+    
+    if (!response.ok) {
       if (window.debugLog) {
         window.debugLog('SetModel HTTP error', {
           modelId,
           status: response.status,
           statusText: response.statusText,
           url: response.url,
-          responseBody: responseText
+          responseBody: rawResponseText
         });
       }
       
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
     
-    const data = await response.json();
+    // Parse the raw response as JSON
+    let data;
+    try {
+      data = JSON.parse(rawResponseText);
+      if (window.debugLog) {
+        window.debugLog('Successfully parsed JSON in setModel', {
+          modelId,
+          parsedData: data,
+          rawTextLength: rawResponseText.length
+        });
+      }
+    } catch (parseError) {
+      if (window.debugLog) {
+        window.debugLog('JSON parse error in setModel', {
+          modelId,
+          parseError: parseError.message,
+          rawResponseText: rawResponseText,
+          responseLength: rawResponseText.length
+        });
+      }
+      throw new Error(`Failed to parse JSON response: ${parseError.message}`);
+    }
     const model = data.models.find(m => m.id === modelId);
     
     localStorage.setItem('selectedModel', modelId);
@@ -465,15 +537,73 @@ async function uploadAndConvertDocFile(file) {
       method: 'POST',
       body: formData,
     });
-    if (response.ok) {
-      const data = await response.json();
-      return data.markdownContent;
-    } else {
-      const errorData = await response.json();
-      const message = `Error converting file: ${errorData.error}`;
-      alert(message);
+    
+    // Get raw response for debugging
+    let rawResponseText = '';
+    try {
+      rawResponseText = await response.text();
       if (window.debugLog) {
-        window.debugLog('File conversion API error', { fileName: file?.name, status: response.status, error: errorData.error });
+        window.debugLog('Raw response from file conversion', {
+          fileName: file?.name,
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          rawResponseText: rawResponseText,
+          responseLength: rawResponseText.length
+        });
+      }
+    } catch (textError) {
+      rawResponseText = 'Unable to read response body';
+      if (window.debugLog) {
+        window.debugLog('Failed to read conversion response text', { 
+          fileName: file?.name,
+          status: response.status,
+          textError: textError.message 
+        });
+      }
+    }
+    
+    if (response.ok) {
+      try {
+        const data = JSON.parse(rawResponseText);
+        if (window.debugLog) {
+          window.debugLog('Successfully parsed conversion JSON', {
+            fileName: file?.name,
+            hasMarkdownContent: !!data.markdownContent,
+            contentLength: data.markdownContent?.length || 0
+          });
+        }
+        return data.markdownContent;
+      } catch (parseError) {
+        if (window.debugLog) {
+          window.debugLog('JSON parse error in file conversion', {
+            fileName: file?.name,
+            parseError: parseError.message,
+            rawResponseText: rawResponseText,
+            responseLength: rawResponseText.length
+          });
+        }
+        alert('Error: Failed to parse conversion response');
+        return null;
+      }
+    } else {
+      try {
+        const errorData = JSON.parse(rawResponseText);
+        const message = `Error converting file: ${errorData.error}`;
+        alert(message);
+        if (window.debugLog) {
+          window.debugLog('File conversion API error', { fileName: file?.name, status: response.status, error: errorData.error, rawResponse: rawResponseText });
+        }
+      } catch (parseError) {
+        if (window.debugLog) {
+          window.debugLog('Failed to parse error response from file conversion', {
+            fileName: file?.name,
+            status: response.status,
+            rawResponseText: rawResponseText,
+            parseError: parseError.message
+          });
+        }
+        alert(`Error converting file: HTTP ${response.status}`);
       }
       return null;
     }
@@ -710,7 +840,52 @@ async function sendMessage() {
       body: JSON.stringify(payload)
     });
 
-    const data = await response.json();
+    // Get raw response for debugging
+    let rawResponseText = '';
+    try {
+      rawResponseText = await response.text();
+      if (window.debugLog) {
+        window.debugLog('Raw response from transcript/extension', {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          rawResponseText: rawResponseText,
+          responseLength: rawResponseText.length,
+          requestPayload: payload
+        });
+      }
+    } catch (textError) {
+      rawResponseText = 'Unable to read response body';
+      if (window.debugLog) {
+        window.debugLog('Failed to read transcript extension response text', { 
+          status: response.status,
+          textError: textError.message 
+        });
+      }
+    }
+
+    // Parse response as JSON
+    let data;
+    try {
+      data = JSON.parse(rawResponseText);
+      if (window.debugLog) {
+        window.debugLog('Successfully parsed transcript extension JSON', {
+          parsedData: data,
+          rawTextLength: rawResponseText.length
+        });
+      }
+    } catch (parseError) {
+      if (window.debugLog) {
+        window.debugLog('JSON parse error in transcript extension', {
+          parseError: parseError.message,
+          rawResponseText: rawResponseText,
+          responseLength: rawResponseText.length,
+          status: response.status
+        });
+      }
+      // For transcript extension, we still want to show a user-friendly error
+      data = { error: `Failed to parse response: ${parseError.message}` };
+    }
     if (response.ok) {
       const suffix = TranscriptFragment.fromJSON(data);
       currentTranscript = currentTranscript.plus(suffix);
