@@ -4,7 +4,7 @@ import { Message, TranscriptFragment } from './src/charmonator/v1/transcript.mjs
 import { ImageAttachment, DocumentAttachment } from './src/charmonator/v1/transcript.mjs';
 
 // API url:
-const CHARMONATOR_API_URL = './api/charmonator/v1'; // Adjust if needed
+const CHARMONATOR_API_URL = './charm/api/charmonator/v1'; // Adjust if needed
 
 // DOM Elements
 const chatMain = document.getElementById('chatMain');
@@ -123,7 +123,7 @@ async function loadAvailableModels() {
   let response;
   let rawResponseText = '';
   try {
-    response = await fetch('./api/charmonator/v1/models');
+    response = await fetch('./charm/api/charmonator/v1/options');
     
     // Capture full response details for debugging
     const responseDetails = {
@@ -142,7 +142,7 @@ async function loadAvailableModels() {
     try {
       rawResponseText = await response.text();
       if (window.debugLog) {
-        window.debugLog('Raw response from /api/charmonator/v1/models', {
+        window.debugLog('Raw response from /charm/api/charmonator/v1/options', {
           ...responseDetails,
           rawResponseText: rawResponseText,
           responseLength: rawResponseText.length
@@ -223,7 +223,7 @@ async function loadAvailableModels() {
     const errorDetails = {
       error: error.message,
       stack: error.stack,
-      url: './api/charmonator/v1/models',
+      url: './charm/api/charmonator/v1/options',
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString()
     };
@@ -256,7 +256,7 @@ async function setModel(modelId) {
     try {
       rawResponseText = await response.text();
       if (window.debugLog) {
-        window.debugLog('Raw response from /api/charmonator/v1/models (setModel)', {
+        window.debugLog('Raw response from /charm/api/charmonator/v1/options (setModel)', {
           modelId,
           status: response.status,
           statusText: response.statusText,
