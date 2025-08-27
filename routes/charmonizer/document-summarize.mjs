@@ -12,6 +12,45 @@ import { jsonSafeFromException } from '../../lib/providers/provider_exception.mj
 const jobs = {};
 
 /**
+ * Budget helper functions for token/word conversions
+ */
+
+/**
+ * Convert tokens to words using the given ratio
+ * @param {number} tokens - Number of tokens
+ * @param {number} tokensPerWord - Tokens per word ratio (default 1.33)
+ * @returns {number} - Number of words
+ */
+function tokensToWords(tokens, tokensPerWord = 1.33) {
+  if (!tokens || tokens <= 0) return 0;
+  return Math.max(0, Math.floor(tokens / tokensPerWord));
+}
+
+/**
+ * Convert words to tokens using the given ratio
+ * @param {number} words - Number of words
+ * @param {number} tokensPerWord - Tokens per word ratio (default 1.33)
+ * @returns {number} - Number of tokens
+ */
+function wordsToTokens(words, tokensPerWord = 1.33) {
+  if (!words || words <= 0) return 0;
+  return Math.max(0, Math.ceil(words * tokensPerWord));
+}
+
+/**
+ * Add word budget instruction to text
+ * @param {string} text - Original text
+ * @param {number} wordLimit - Word limit
+ * @param {number} tokenApprox - Approximate tokens
+ * @returns {string} - Text with budget instruction
+ */
+function addWordBudgetInstruction(text, wordLimit, tokenApprox) {
+  if (!wordLimit) return text;
+  const budgetLine = `\n\n[Constraint] Your response must be at most ${wordLimit} words.`;
+  return text + budgetLine;
+}
+
+/**
  * Summarization system prompts for each mode:
  */
 const SYSTEM_PROMPTS = {
@@ -473,6 +512,12 @@ async function runDeltaFoldSummarization(job, topDoc) {
   const beforeCount = parseInt(job.context_chunks_before || 0, 10);
   const afterCount = parseInt(job.context_chunks_after || 0, 10);
 
+  // Budget tracking variables
+  const totalBudgetTokens = Number(job.budget) || null;
+  const tokensPerWord = Number(job.tokens_per_word) || 1.33;
+  let budgetRemainingTokens = totalBudgetTokens;
+  let chunksRemaining = chunkArray.length;
+
   for (let i = 0; i < chunkArray.length; i++) {
     const thisChunkDoc = new JSONDocument(chunkArray[i], topDoc);
 
@@ -513,11 +558,20 @@ async function runDeltaFoldSummarization(job, topDoc) {
       userContent += `\n\n---\n\n## Succeeding chunk(s):\n${succeedingText}`;
     }
 
+    // Apply budget constraints if budget is set
+    let options = {...job.options};
+    if (budgetRemainingTokens != null && chunksRemaining > 0) {
+      const perChunkTokenCap = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
+      const perChunkWordCap = tokensToWords(perChunkTokenCap, tokensPerWord);
+      userContent = addWordBudgetInstruction(userContent, perChunkWordCap, perChunkTokenCap);
+      options.max_output_tokens = perChunkTokenCap;
+    }
+
     let transcript = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent }
     ];
-    const llmReply = await callLLM(chatModel, transcript, job.options);
+    const llmReply = await callLLM(chatModel, transcript, options);
 
     const newDelta = parseLLMReply(llmReply, job);
 
@@ -530,6 +584,17 @@ async function runDeltaFoldSummarization(job, topDoc) {
     } else {
       deltaArray.push(newDelta);
     }
+    
+    // Update budget tracking if budget is set
+    if (budgetRemainingTokens != null) {
+      const wordsUsed = typeof newDelta === 'string'
+        ? newDelta.trim().split(/\s+/).length
+        : JSON.stringify(newDelta).trim().split(/\s+/).length;
+      const tokensUsed = wordsToTokens(wordsUsed, tokensPerWord);
+      budgetRemainingTokens = Math.max(0, budgetRemainingTokens - tokensUsed);
+      chunksRemaining--;
+    }
+    
     job.chunks_completed++;
   }
 
@@ -800,6 +865,8 @@ const router = express.Router();
  *
  *   - merge_summaries_guidance: (string) used by "map-merge" and "merge" modes, with instructions for merging partial summaries
  *   - merge_mode: (string) either "left-to-right" (default) or "hierarchical" for how partial summaries are combined
+ *   - budget: (number) optional, maximum tokens allowed for the final summary
+ *   - tokens_per_word: (number) optional, tokens per word ratio (default: 1.33)
  */
 router.post('/', async (req, res) => {
   try {
@@ -823,7 +890,9 @@ router.post('/', async (req, res) => {
       num_client_request_max_attempts = null,
 
       merge_summaries_guidance,
-      merge_mode
+      merge_mode,
+      budget,
+      tokens_per_word
     } = req.body;
 
     if (!document || !method) {
@@ -860,7 +929,10 @@ router.post('/', async (req, res) => {
       num_client_request_max_attempts,
 
       merge_summaries_guidance: merge_summaries_guidance || '',
-      merge_mode: merge_mode || 'left-to-right'
+      merge_mode: merge_mode || 'left-to-right',
+      
+      budget: budget || null,
+      tokens_per_word: tokens_per_word || 1.33
     });
 
     // run in background
