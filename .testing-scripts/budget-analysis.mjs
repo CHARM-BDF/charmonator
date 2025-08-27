@@ -3,7 +3,7 @@ import fs from 'fs';
 import fetch from 'node-fetch';
 
 const BASE_URL = 'http://localhost:5002/charm/api/charmonizer/v1';
-const testDoc = JSON.parse(fs.readFileSync('./testing-data/synthetic-case-7-pages.pdf.doc.json', 'utf8'));
+const testDoc = JSON.parse(fs.readFileSync('../testing-data/synthetic-case-7-pages.pdf.doc.json', 'utf8'));
 
 /**
  * Run a single test and return detailed results

@@ -7,7 +7,7 @@ import fetch from 'node-fetch';
 const BASE_URL = 'http://localhost:5002/charm/api/charmonizer/v1';
 
 // Load test document
-const testDoc = JSON.parse(fs.readFileSync('./testing-data/synthetic-case-7-pages.pdf.doc.json', 'utf8'));
+const testDoc = JSON.parse(fs.readFileSync('../testing-data/synthetic-case-7-pages.pdf.doc.json', 'utf8'));
 
 console.log(`Testing with document: ${testDoc.metadata.originating_filename}`);
 console.log(`Pages available: ${testDoc.chunks.pages.length}`);
