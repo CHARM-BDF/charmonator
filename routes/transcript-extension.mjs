@@ -98,7 +98,7 @@ router.post('/extension', async (req, res) => {
         break;
       } else if (attempt < (numAttempts - 1)) {
         mostValidOutput = data;
-        console.log({"event": "attempting repair", attempt, numAttempts, "data":suffix.toJSON()})
+        console.log(JSON.stringify({"event": "attempting repair", attempt, numAttempts, "data":suffix.toJSON()}))
         const incorrectResponse = JSON.stringify(suffix.toJSON(), null, 2);
         invocationOptions.repairs = `
           We have tried to use Structured Output to decode the following JSON Response.
