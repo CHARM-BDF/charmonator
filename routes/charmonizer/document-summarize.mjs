@@ -44,7 +44,7 @@ function wordsToTokens(words, tokensPerWord = 1.33) {
  * @param {number} tokenApprox - Approximate tokens
  * @returns {string} - Text with budget instruction
  */
-function addWordBudgetInstruction(text, wordLimit, tokenApprox) {
+function addWordBudgetInstruction(text, wordLimit) {
   if (!wordLimit) return text;
   const budgetLine = `\n\n[Constraint] Your response must be at most ${wordLimit} words.`;
   return text + budgetLine;
@@ -563,7 +563,7 @@ async function runDeltaFoldSummarization(job, topDoc) {
     if (budgetRemainingTokens != null && chunksRemaining > 0) {
       const perChunkTokenCap = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
       const perChunkWordCap = tokensToWords(perChunkTokenCap, tokensPerWord);
-      userContent = addWordBudgetInstruction(userContent, perChunkWordCap, perChunkTokenCap);
+      userContent = addWordBudgetInstruction(userContent, perChunkWordCap);
       options.max_output_tokens = perChunkTokenCap;
     }
 
