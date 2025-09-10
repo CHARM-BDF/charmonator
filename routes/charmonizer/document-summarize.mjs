@@ -3,7 +3,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { fetchChatModel } from '../../lib/core.mjs';
-import { JSONDocument } from '../../lib/json-document.mjs';
+import { JSONDocument, tokenCount } from '../../lib/json-document.mjs';
 import { jsonSafeFromException } from '../../lib/providers/provider_exception.mjs';
 
 /**
@@ -488,6 +488,38 @@ async function runFoldSummarization(job, topDoc) {
   topDoc._doc.annotations[job.annotation_field] = accumulatedSummary;
 }
 
+class SmoothedRatioEstimator {
+  // Low brow explanation: Hack to estimate a ratio online while never dividing by zero.
+  //
+  // High brow explanation: Implements a deliberately constrained case Additive Smoothing
+  // aka Laplace Smoothing.  The constructor initializes aTotal to 1. This choice is
+  // effectively a special case of Laplace smoothing for a two‐outcome distribution: one
+  // “pseudocount” is placed on the denominator, and some user‐chosen “pseudocount” is
+  // placed on the numerator.
+  //
+  // The The reason that we hard-code the pseudocount to 1 is to roll off the prior
+  // as soon as we have successfully avoided the zero denominator scenario.
+  constructor(initialB) {
+    this.bTotal = initialB;
+    this.aTotal = 1;
+  }
+
+  tally(b, a) {
+    if (b < 0) {
+      throw new Error("b must be >= 0");
+    }
+    if (a < 0) {
+      throw new Error("a must be >= 0");
+    }
+    this.bTotal += b;
+    this.aTotal += a;
+  }
+
+  ratio() {
+    return this.bTotal / this.aTotal;
+  }
+}
+
 /**
  * "delta-fold": each chunk => produce a "delta" only with new info. 
  * The final doc-level summary is an array of these deltas.
@@ -513,9 +545,12 @@ async function runDeltaFoldSummarization(job, topDoc) {
   const afterCount = parseInt(job.context_chunks_after || 0, 10);
 
   // Budget tracking variables
-  const totalBudgetTokens = Number(job.budget) || null;
-  const tokensPerWord = Number(job.tokens_per_word) || 1.33;
-  let budgetRemainingTokens = totalBudgetTokens;
+  // const totalBudgetTokens = Number(job.budget) || null;
+  // const tokensPerWord = Number(job.tokens_per_word) || 1.33;
+  let budgetRemainingTokens = Number(job.budget) || null;
+  const wordsPerToken = new SmoothedRatioEstimator(0.75)
+  const statArray = new Array()
+
   let chunksRemaining = chunkArray.length;
 
   for (let i = 0; i < chunkArray.length; i++) {
@@ -558,13 +593,16 @@ async function runDeltaFoldSummarization(job, topDoc) {
       userContent += `\n\n---\n\n## Succeeding chunk(s):\n${succeedingText}`;
     }
 
-    // Apply budget constraints if budget is set
+    // Apply budget tracking constraints if budget is set
     let options = {...job.options};
+    let numTokensTarget = null;
+    let numWordsTarget = null;
     if (budgetRemainingTokens != null && chunksRemaining > 0) {
-      const perChunkTokenCap = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
-      const perChunkWordCap = tokensToWords(perChunkTokenCap, tokensPerWord);
-      userContent = addWordBudgetInstruction(userContent, perChunkWordCap);
-      options.max_output_tokens = perChunkTokenCap;
+      numTokensTarget = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
+      numWordsTarget = wordsPerToken.ratio() * numTokensTarget;
+      // was: tokensToWords(perChunkTokenCap, tokensPerWord)
+      userContent = addWordBudgetInstruction(userContent, numWordsTarget);
+      options.max_output_tokens = numTokensTarget;
     }
 
     let transcript = [
@@ -587,11 +625,23 @@ async function runDeltaFoldSummarization(job, topDoc) {
     
     // Update budget tracking if budget is set
     if (budgetRemainingTokens != null) {
-      const wordsUsed = typeof newDelta === 'string'
-        ? newDelta.trim().split(/\s+/).length
-        : JSON.stringify(newDelta).trim().split(/\s+/).length;
-      const tokensUsed = wordsToTokens(wordsUsed, tokensPerWord);
-      budgetRemainingTokens = Math.max(0, budgetRemainingTokens - tokensUsed);
+      const numTokensInputActual = tokenCount(thisChunkDoc.getResolvedContent())
+      const numTokensActual = typeof newDelta === 'string'
+        ? tokenCount(newDelta.trim())
+        : tokenCount(JSON.stringify(newDelta).trim());
+      statArray.push({
+        numTokensInputActual,
+        numTokensTarget,
+        numWordsTarget,
+        numTokensActual,
+        wordsPerToken: wordsPerToken.ratio(),
+        numTokensTotalTarget: Number(job.budget),
+        numTokensBudgetRemaning: budgetRemainingTokens,
+        iChunk: i,
+        chunksRemaining
+      })
+      wordsPerToken.tally(numWordsTarget, numTokensActual)
+      budgetRemainingTokens = Math.max(0, budgetRemainingTokens - numTokensActual);
       chunksRemaining--;
     }
     
@@ -599,6 +649,7 @@ async function runDeltaFoldSummarization(job, topDoc) {
   }
 
   topDoc.setChunksForGroup(job.chunk_group, chunkArray);
+  topDoc.setChunksForGroup(job.chunk_group+"_stats", statArray)
   topDoc._doc.annotations[job.annotation_field] = deltaArray;
 }
 
