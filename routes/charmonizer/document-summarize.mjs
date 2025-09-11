@@ -915,7 +915,6 @@ const router = express.Router();
  *   - merge_summaries_guidance: (string) used by "map-merge" and "merge" modes, with instructions for merging partial summaries
  *   - merge_mode: (string) either "left-to-right" (default) or "hierarchical" for how partial summaries are combined
  *   - budget: (number) optional, maximum tokens allowed for the final summary
- *   - tokens_per_word: (number) optional, tokens per word ratio (default: 1.33)
  */
 router.post('/', async (req, res) => {
   console.log(JSON.stringify({
@@ -944,8 +943,7 @@ router.post('/', async (req, res) => {
 
       merge_summaries_guidance,
       merge_mode,
-      budget,
-      tokens_per_word
+      budget
     } = req.body;
 
     if (!document || !method) {
@@ -984,8 +982,7 @@ router.post('/', async (req, res) => {
       merge_summaries_guidance: merge_summaries_guidance || '',
       merge_mode: merge_mode || 'left-to-right',
       
-      budget: budget || null,
-      tokens_per_word: tokens_per_word || 1.33
+      budget: budget || null
     });
 
     // run in background
