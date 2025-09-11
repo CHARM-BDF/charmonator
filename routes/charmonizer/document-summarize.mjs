@@ -46,7 +46,7 @@ function wordsToTokens(words, tokensPerWord = 1.33) {
  */
 function addWordBudgetInstruction(text, wordLimit) {
   if (!wordLimit) return text;
-  const budgetLine = `\n\n[Constraint] Your response must be at most ${wordLimit} words.`;
+  const budgetLine = `\n\n[Constraint] Do not use more than ${wordLimit} words.`;
   return text + budgetLine;
 }
 
