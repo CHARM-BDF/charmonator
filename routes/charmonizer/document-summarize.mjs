@@ -581,8 +581,24 @@ async function runDeltaFoldSummarization(job, topDoc) {
     const chunkMetadata = JSON.stringify(thisChunkDoc._doc.metadata || {}, null, 2);
     const chunkText = `<chunk id="${thisChunkDoc._doc.id}">\n${thisChunkDoc.getResolvedContent()}\n</chunk>`;
 
+    let deltaArrayTmp = (
+      (i % 2) === 0
+      ? deltaArray
+      : job.perturb_accumulating_summary === "ablate"
+      ? deltaArray.filter((_, index) => index % 2 === 0)
+      : job.perturb_accumulating_summary === "stutter"
+      ? Array.from({length: deltaArray.length },  (_, index) => deltaArray[index % 5])
+      : deltaArray)
+    console.log(JSON.stringify({
+      event:"perturb_accumulating_summary",
+      perturb_accumulating_summary: job.perturb_accumulating_summary,
+      lengthBefore: deltaArray.length,
+      lengthAfter: deltaArrayTmp.length
+    }))
+    let stDeltaArray = JSON.stringify(deltaArrayTmp, null, 2)
+
     let userContent = `## Document ID: ${docId}\n`;
-    userContent += `## Accumulating summary array (so far):\n${JSON.stringify(deltaArray, null, 2)}\n\n`;
+    userContent += `## Accumulating summary array (so far):\n${stDeltaArray}\n\n`;
     if (precedingText) {
       userContent += `## Preceding chunk(s):\n${precedingText}\n\n---\n\n`;
     }
@@ -629,6 +645,7 @@ async function runDeltaFoldSummarization(job, topDoc) {
         : tokenCount(JSON.stringify(newDelta).trim());
       statArray.push({
         numTokensInputActual,
+        numTokensDeltaActual: tokenCount(stDeltaArray),
         numTokensTarget,
         numWordsTarget,
         numTokensActual,
@@ -943,7 +960,8 @@ router.post('/', async (req, res) => {
 
       merge_summaries_guidance,
       merge_mode,
-      budget
+      budget,
+      perturb_accumulating_summary
     } = req.body;
 
     if (!document || !method) {
@@ -982,7 +1000,8 @@ router.post('/', async (req, res) => {
       merge_summaries_guidance: merge_summaries_guidance || '',
       merge_mode: merge_mode || 'left-to-right',
       
-      budget: budget || null
+      budget: budget || null,
+      perturb_accumulating_summary: perturb_accumulating_summary || null
     });
 
     // run in background
