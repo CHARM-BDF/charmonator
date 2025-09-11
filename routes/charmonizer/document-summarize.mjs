@@ -545,8 +545,6 @@ async function runDeltaFoldSummarization(job, topDoc) {
   const afterCount = parseInt(job.context_chunks_after || 0, 10);
 
   // Budget tracking variables
-  // const totalBudgetTokens = Number(job.budget) || null;
-  // const tokensPerWord = Number(job.tokens_per_word) || 1.33;
   let budgetRemainingTokens = Number(job.budget) || null;
   const wordsPerToken = new SmoothedRatioEstimator(0.75)
   const statArray = new Array()
