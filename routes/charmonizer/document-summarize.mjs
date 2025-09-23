@@ -431,6 +431,13 @@ async function runFoldSummarization(job, topDoc) {
   const beforeCount = parseInt(job.context_chunks_before || 0, 10);
   const afterCount = parseInt(job.context_chunks_after || 0, 10);
 
+  // Budget tracking variables
+  let budgetRemainingTokens = Number(job.budget) || null;
+  const wordsPerToken = new SmoothedRatioEstimator(0.75)
+  const statArray = new Array()
+
+  let chunksRemaining = chunkArray.length;
+
   for (let i = 0; i < chunkArray.length; i++) {
     const thisChunkDoc = new JSONDocument(chunkArray[i], topDoc);
 
@@ -475,6 +482,17 @@ async function runFoldSummarization(job, topDoc) {
       userContent += `\n\n---\n\n## Succeeding chunk(s):\n${succeedingText}`;
     }
 
+    // Apply budget tracking constraints if budget is set
+    let options = {};
+    let numTokensTarget = null;
+    let numWordsTarget = null;
+    if (budgetRemainingTokens != null && chunksRemaining > 0) {
+      numTokensTarget = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
+      numWordsTarget = wordsPerToken.ratio() * numTokensTarget;
+      userContent = addWordBudgetInstruction(userContent, numWordsTarget);
+      options.max_output_tokens = numTokensTarget;
+    }
+
     let transcript = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent }
@@ -483,10 +501,34 @@ async function runFoldSummarization(job, topDoc) {
     const llmReply = await callLLM(chatModel, transcript, job.options);
     const finalObj = parseLLMReply(llmReply, job);
     accumulatedSummary = finalObj;
+
+    // Update budget tracking if budget is set
+    if (budgetRemainingTokens != null) {
+      const numTokensInputActual = tokenCount(thisChunkDoc.getResolvedContent())
+      const numTokensActual = typeof finalObj === 'string'
+        ? tokenCount(finalObj.trim())
+        : tokenCount(JSON.stringify(finalObj).trim());
+      statArray.push({
+        numTokensInputActual,
+        numTokensTarget,
+        numWordsTarget,
+        numTokensActual,
+        wordsPerToken: wordsPerToken.ratio(),
+        numTokensTotalTarget: Number(job.budget),
+        numTokensBudgetRemaning: budgetRemainingTokens,
+        iChunk: i,
+        chunksRemaining
+      })
+      wordsPerToken.tally(numWordsTarget, numTokensActual)
+      budgetRemainingTokens = Math.max(0, budgetRemainingTokens - numTokensActual);
+      chunksRemaining--;
+    }
+
     job.chunks_completed++;
   }
 
   ensureAnnotations(topDoc._doc);
+  topDoc.setChunksForGroup(job.chunk_group+"_stats", statArray)
   topDoc._doc.annotations[job.annotation_field] = accumulatedSummary;
 }
 
