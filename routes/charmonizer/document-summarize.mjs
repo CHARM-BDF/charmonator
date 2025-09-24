@@ -76,6 +76,7 @@ You will produce a summary for exactly one chunk.
 (You may also be given some preceding chunks for context, and possibly succeeding chunks.)
 
 When summarizing, follow the provided guidance.
+If [Constrant] is provided, follow that guidance as well.
 
 <guidance>
 <user-provided guidance>
