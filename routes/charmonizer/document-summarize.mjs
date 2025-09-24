@@ -44,12 +44,11 @@ function wordsToTokens(words, tokensPerWord = 1.33) {
  * @param {number} tokenApprox - Approximate tokens
  * @returns {string} - Text with budget instruction
  */
-function addWordBudgetInstruction(text, wordLimit) {
-  if (!wordLimit) return text;
+function instructionsForWordBudget(wordLimit) {
   const r2 = Math.sqrt(2)
   const [xMin, xMax] = [Math.round(wordLimit / r2), Math.round(wordLimit * r2)];
   const budgetLine = `[Constraint] Do not use more than ${xMax} words.  Do not use less than ${xMin} words.`;
-  return budgetLine + "\n\n" + text;
+  return budgetLine;
 }
 
 /**
@@ -489,7 +488,7 @@ async function runFoldSummarization(job, topDoc) {
     if (budgetRemainingTokens != null && chunksRemaining > 0) {
       numTokensTarget = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
       numWordsTarget = wordsPerToken.ratio() * numTokensTarget;
-      userContent = addWordBudgetInstruction(userContent, numWordsTarget);
+      userContent = instructionsForWordBudget(numWordsTarget) + "\n\n" + userContent;
       options.max_output_tokens = numTokensTarget;
     }
 
@@ -659,7 +658,7 @@ async function runDeltaFoldSummarization(job, topDoc) {
       numTokensTarget = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
       numWordsTarget = wordsPerToken.ratio() * numTokensTarget;
       // was: tokensToWords(perChunkTokenCap, tokensPerWord)
-      userContent = addWordBudgetInstruction(userContent, numWordsTarget);
+      userContent = instructionsForWordBudget(numWordsTarget) + "\n\n" + userContent;
       options.max_output_tokens = numTokensTarget;
     }
 
