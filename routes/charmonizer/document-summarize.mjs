@@ -47,7 +47,7 @@ function wordsToTokens(words, tokensPerWord = 1.33) {
 function instructionsForWordBudget(wordLimit) {
   const r2 = Math.sqrt(2)
   const [xMin, xMax] = [Math.round(wordLimit / r2), Math.round(wordLimit * r2)];
-  const budgetLine = `[Constraint] Do not use more than ${xMax} words.  Do not use less than ${xMin} words.`;
+  const budgetLine = `<constraint> Do not use more than ${xMax} words.  Do not use less than ${xMin} words. </constraint>`;
   return budgetLine;
 }
 
@@ -76,7 +76,7 @@ You will produce a summary for exactly one chunk.
 (You may also be given some preceding chunks for context, and possibly succeeding chunks.)
 
 When summarizing, follow the provided guidance.
-If [Constrant] is provided, follow that guidance as well.
+If the user prompt contains <constrant>...</constraint>, follow those instructions as well.
 
 <guidance>
 <user-provided guidance>
