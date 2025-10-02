@@ -42,6 +42,9 @@ If you choose an alternative location for your config.json, config.secret.json w
       "context_size": 8192,
       "output_limit": 2048,
 
+      "max_attempts": 2,
+      "ms_timeout": 600000,      // 10 minutes per request
+
       // Optional: system message
       "system": "You are a helpful assistant."
     }
