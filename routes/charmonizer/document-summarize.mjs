@@ -248,6 +248,10 @@ async function processSummarizeAsync(job) {
     job.status = 'complete';
   } catch (err) {
     job.status = 'error';
+    console.log({"event":"/summarize complete 1",
+      stack: err.stack,
+      errJson: JSON.parse(String(err))
+    })
     job.error = String(err);
   }
 }
