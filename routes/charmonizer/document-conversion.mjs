@@ -14,6 +14,7 @@ import pdfParse from 'pdf-parse';
 // For fallback LLM-based extraction:
 import { imageToMarkdown } from '../../lib/core.mjs';
 import { scrutinizeViaDiff2 } from '../../lib/scrutinize.mjs';
+import { jsonSafeFromException } from '../../lib/providers/provider_exception.mjs';
 
 /**
  * We'll store job data in memory for demonstration.
@@ -302,14 +303,22 @@ router.post('/documents', upload.single('file'), async (req, res) => {
     // Kick off async
     processDocumentAsync(jobRec).catch(err => {
       jobRec.status = 'error';
-      jobRec.error = String(err);
-      console.error('processDocumentAsync error:', err);
+      const j = jsonSafeFromException(err)
+      console.error({"event":"processDocumentAsync error",
+        stack: err.stack,
+        errJson: j
+      })
+      jobRec.error = j;
     });
 
     return res.json({ job_id: jobRec.id });
-  } catch (error) {
-    console.error('[POST] /documents error:', error);
-    return res.status(500).json({ error: String(error) });
+  } catch (err) {
+    const j = jsonSafeFromException(err)
+    console.error({"event":"[POST] /documents error",
+      stack: err.stack,
+      errJson: j
+    })
+    return res.status(500).json(j);
   }
 });
 
@@ -627,7 +636,12 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
       jobRec.status = 'complete';
     } else {
       jobRec.status = 'error';
-      jobRec.error = `PDF processing failed: ${err.message}`;
+      const j = jsonSafeFromException(err)
+      console.error({"event":"PDF processing failed",
+        stack: err.stack,
+        errJson: j
+      })
+      jobRec.error = j;
     }
   }
 }
@@ -716,7 +730,12 @@ async function processDocxDocument(jobRec) {
     jobRec.status = 'complete';
   } catch (err) {
     jobRec.status = 'error';
-    jobRec.error = `DOCX processing failed: ${err.message}`;
+    const j = jsonSafeFromException(err)
+    console.error({"event":"DOCX processing failed",
+      stack: err.stack,
+      errJson: j
+    })
+    jobRec.error = j;
   } finally {
     await fs.promises.unlink(tmpDocxPath).catch(() => {});
   }

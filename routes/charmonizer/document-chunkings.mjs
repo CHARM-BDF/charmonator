@@ -3,6 +3,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { JSONDocument } from '../../lib/json-document.mjs';
+import { jsonSafeFromException } from '../../lib/providers/provider_exception.mjs';
 
 /**
  * In-memory store for chunking jobs.
@@ -135,7 +136,12 @@ async function runChunkingJob(job) {
 
   } catch (err) {
     job.status = 'error';
-    job.error = String(err);
+    const j = jsonSafeFromException(err)
+    console.error({"event":"Error chunking",
+      stack: err.stack,
+      errJson: j
+    })
+    job.error = j;
     job.progress = 100;
   }
 }
@@ -197,9 +203,13 @@ router.post('/', async (req, res) => {
       status: job.status
     });
 
-  } catch (error) {
-    console.error('Error in POST /charmonizer/v1/chunkings:', error);
-    res.status(500).json({ error: error.message || 'Internal server error' });
+  } catch (err) {
+    const j = jsonSafeFromException(err)
+    console.error({"event":"Error in POST /charmonizer/v1/chunkings",
+      stack: err.stack,
+      errJson: j
+    })
+    res.status(500).json(j);
   }
 });
 

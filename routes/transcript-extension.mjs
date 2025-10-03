@@ -3,6 +3,7 @@ import express from 'express';
 import { fetchChatModel } from '../lib/core.mjs';
 import { TranscriptFragment } from '../lib/transcript.mjs';
 import { FunctionTool } from '../lib/function.mjs';
+import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 
 const router = express.Router();
 
@@ -67,13 +68,13 @@ router.post('/extension', async (req, res) => {
     // Return the suffix as JSON
     res.json(suffix.toJSON());
 
-  } catch (error) {
-    console.error('Error extending transcript:', error);
-    // Expand all inner objects to a depth of 10 for debugging:
-    console.error('Transcript', JSON.stringify(transcriptCopy, null, 10));
-    res.status(500).json({
-      error: error.message || 'Internal server error'
-    });
+  } catch (err) {
+    const j = jsonSafeFromException(err)
+    console.error({"event":"Error extending transcript",
+      stack: err.stack,
+      errJson: j
+    })
+    res.status(500).json(j);
   }
 });
 

@@ -4,6 +4,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { fetchChatModel } from '../../lib/core.mjs';
 import { JSONDocument } from '../../lib/json-document.mjs';
+import { jsonSafeFromException } from '../../lib/providers/provider_exception.mjs';
 
 /**
  * We'll store summarization jobs in memory. For production, use a DB or persistent store.
@@ -248,11 +249,12 @@ async function processSummarizeAsync(job) {
     job.status = 'complete';
   } catch (err) {
     job.status = 'error';
-    console.log({"event":"/summarize complete 1",
+    const j = jsonSafeFromException(err)
+    console.error({"event":"error POST /summaries setup",
       stack: err.stack,
-      errJson: JSON.parse(String(err))
+      errJson: j
     })
-    job.error = String(err);
+    job.error = j;
   }
 }
 
@@ -924,8 +926,12 @@ router.post('/', async (req, res) => {
     // run in background
     processSummarizeAsync(job).catch(err => {
       job.status = 'error';
-      job.error = String(err);
-      console.error('Summarize job error:', err);
+      const j = jsonSafeFromException(err)
+      console.error({"event":"error POST /summaries async",
+        stack: err.stack,
+        errJson: j
+      })
+      job.error = j;
     });
 
     // Return 202 with job ID
@@ -933,9 +939,13 @@ router.post('/', async (req, res) => {
       .status(202)
       .location(`/summaries/${job.id}`)
       .json({ job_id: job.id });
-  } catch (error) {
-    console.error('POST /summaries error:', error);
-    res.status(500).json({ error: String(error) });
+  } catch (err) {
+    const j = jsonSafeFromException(err)
+    console.error({"event":"error POST /summaries sync",
+      stack: err.stack,
+      errJson: j
+    })
+    res.status(500).json(j);
   }
 });
 

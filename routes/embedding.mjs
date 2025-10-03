@@ -1,6 +1,7 @@
 // routes/embedding.mjs
 import express from 'express';
 import { fetchProvider } from '../lib/core.mjs';
+import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 
 const router = express.Router();
 
@@ -42,9 +43,13 @@ router.post('/', async (req, res) => {
 
     // Return the embedding vector:
     return res.json({ embedding: embeddingArray });
-  } catch (error) {
-    console.error('Error in /embedding:', error);
-    return res.status(500).json({ error: error.message || 'Internal server error' });
+  } catch (err) {
+    const j = jsonSafeFromException(err)
+    console.error({"event":"Error in /embedding",
+      stack: err.stack,
+      errJson: j
+    })
+    res.status(500).json(j);
   }
 });
 
