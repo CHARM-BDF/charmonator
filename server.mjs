@@ -57,6 +57,11 @@ const upload = multer({
 
 async function main() {
   try {
+    // send console.error to stdout
+    console.error = (...args) => {
+      process.stdout.write(args.join(' ') + '\n');
+    };
+
     // 1) Read config
     setGlobalConfigFile('./conf/config.json');
     const config = getConfig();
