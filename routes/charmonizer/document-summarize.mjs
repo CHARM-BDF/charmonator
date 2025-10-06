@@ -174,6 +174,11 @@ If necessary, fill all required fields.
  */
 function createJobRecord(docObject, params) {
   const jobId = uuidv4();
+  const options = {
+    ...params.options,
+    ms_timeout: params.ms_timeout,
+    max_attempts: params.max_attempts
+  }
   jobs[jobId] = {
     id: jobId,
     status: 'pending',
@@ -182,6 +187,7 @@ function createJobRecord(docObject, params) {
 
     docObject, // the original doc
     ...params, // store summarization params
+    options,
 
     summarizedDoc: null, // final doc with summaries
 
@@ -321,8 +327,8 @@ async function runFullSummarization(job, topDoc) {
 
   // ADJUST so we wrap job.jsonSchema with type: 'json_schema'
   const options = job.jsonSchema
-    ? { response_format: { type: 'json_schema', json_schema: { name: 'forced-schema', schema: job.jsonSchema } } }
-    : {};
+    ? {...job.options, response_format: { type: 'json_schema', json_schema: { name: 'forced-schema', schema: job.jsonSchema } } }
+    : {...job.options};
 
   const assistantReply = await callLLM(chatModel, transcript, options);
   const finalData = parseLLMReply(assistantReply, job);
@@ -396,7 +402,7 @@ async function runMapSummarization(job, topDoc) {
       { role: 'user', content: userContent }
     ];
 
-    const assistantReply = await callLLM(chatModel, transcript);
+    const assistantReply = await callLLM(chatModel, transcript, job.options);
     const finalData = parseLLMReply(assistantReply, job);
 
     ensureAnnotations(thisChunkDoc._doc);
@@ -472,7 +478,7 @@ async function runFoldSummarization(job, topDoc) {
       { role: 'user', content: userContent }
     ];
 
-    const llmReply = await callLLM(chatModel, transcript);
+    const llmReply = await callLLM(chatModel, transcript, job.options);
     const finalObj = parseLLMReply(llmReply, job);
     accumulatedSummary = finalObj;
     job.chunks_completed++;
@@ -565,7 +571,7 @@ async function runDeltaFoldSummarization(job, topDoc) {
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent }
     ];
-    const llmReply = await callLLM(chatModel, transcript, options);
+    const llmReply = await callLLM(chatModel, transcript, job.options);
 
     const newDelta = parseLLMReply(llmReply, job);
 
@@ -689,7 +695,7 @@ async function runMapMergeSummarization(job, topDoc) {
       { role: 'user', content: userContent }
     ];
 
-    const assistantReply = await callLLM(chatModel, transcript);
+    const assistantReply = await callLLM(chatModel, transcript, job.options);
     const partialSummary = parseLLMReply(assistantReply, job);
 
     ensureAnnotations(thisChunkDoc._doc);
@@ -799,7 +805,7 @@ Please produce a single merged summary:
     { role: 'user', content: userContent }
   ];
 
-  const assistantReply = await callLLM(chatModel, transcript);
+  const assistantReply = await callLLM(chatModel, transcript, job.options);
   const merged = parseLLMReply(assistantReply, job);
 
   return merged;
@@ -880,6 +886,9 @@ router.post('/', async (req, res) => {
       annotation_field = 'summary',
       annotation_field_delta = 'summary_delta',
 
+      ms_timeout = null,
+      max_attempts = null,
+
       merge_summaries_guidance,
       merge_mode,
       budget,
@@ -915,6 +924,9 @@ router.post('/', async (req, res) => {
 
       annotation_field,
       annotation_field_delta,
+
+      ms_timeout,
+      max_attempts,
 
       merge_summaries_guidance: merge_summaries_guidance || '',
       merge_mode: merge_mode || 'left-to-right',

@@ -16,6 +16,8 @@ router.post('/extension', async (req, res) => {
       temperature,
       transcript: transcriptJson,
       tools,
+      ms_timeout = null,
+      max_attempts = null,
       // New: Accept an "options" object that can contain response_format, stream, etc.
       options
     } = req.body;
@@ -55,7 +57,12 @@ router.post('/extension', async (req, res) => {
     const incomingTranscript = TranscriptFragment.fromJSON(transcriptJson);
 
     // If no options object was provided, default to empty
-    const invocationOptions = options || {};
+    const options2 = options || {}
+    const invocationOptions = {
+      ...options2,
+      ms_timeout,
+      max_attempts
+    }
 
     // Generate response
     const suffix = await chatModel.extendTranscript(
