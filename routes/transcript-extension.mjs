@@ -16,7 +16,7 @@ router.post('/extension', async (req, res) => {
       temperature,
       transcript: transcriptJson,
       tools,
-      ms_timeout = null,
+      ms_client_request_timeout = null,
       max_attempts = null,
       // New: Accept an "options" object that can contain response_format, stream, etc.
       options
@@ -60,7 +60,7 @@ router.post('/extension', async (req, res) => {
     const options2 = options || {}
     const invocationOptions = {
       ...options2,
-      ms_timeout,
+      ms_client_request_timeout,
       max_attempts
     }
 

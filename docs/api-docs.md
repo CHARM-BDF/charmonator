@@ -100,7 +100,7 @@ POST /transcript/extension
 - **`temperature`** (number, optional): Sampling temperature.  
 - **`transcript`** (object, required): The partial transcript so far.  
 - **`tools`** (array, optional): Additional ephemeral tools to register.  
-- **`ms_timeout`** (number, optional): Override configured time limit for downstream HTTP client calls, in milliseconds.  See [configuration.md](configuration.md#top-level-keys) for details.
+- **`ms_client_request_timeout`** (number, optional): Override configured time limit for downstream HTTP client calls, in milliseconds.  See [configuration.md](configuration.md#top-level-keys) for details.
 - **`max_timeout`** (number, optional): Override configured number of attempts for each downstream HTTP client call.  See [configuration.md](configuration.md#top-level-keys) for details.
 - **`options`** (object, optional):  
   - **`stream`** (boolean, optional): If `true`, the server may return partial chunks.  

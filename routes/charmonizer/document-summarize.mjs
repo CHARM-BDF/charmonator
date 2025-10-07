@@ -176,8 +176,8 @@ function createJobRecord(docObject, params) {
   const jobId = uuidv4();
   const options = {
     ...params.options,
-    ms_timeout: params.ms_timeout,
-    max_attempts: params.max_attempts
+    ms_client_request_timeout: params.ms_client_request_timeout,
+    num_client_request_max_attempts: params.num_client_request_max_attempts
   }
   jobs[jobId] = {
     id: jobId,
@@ -886,8 +886,8 @@ router.post('/', async (req, res) => {
       annotation_field = 'summary',
       annotation_field_delta = 'summary_delta',
 
-      ms_timeout = null,
-      max_attempts = null,
+      ms_client_request_timeout = null,
+      num_client_request_max_attempts = null,
 
       merge_summaries_guidance,
       merge_mode,
@@ -925,8 +925,8 @@ router.post('/', async (req, res) => {
       annotation_field,
       annotation_field_delta,
 
-      ms_timeout,
-      max_attempts,
+      ms_client_request_timeout,
+      num_client_request_max_attempts,
 
       merge_summaries_guidance: merge_summaries_guidance || '',
       merge_mode: merge_mode || 'left-to-right',
