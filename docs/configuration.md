@@ -34,6 +34,17 @@ Below is a complete reference of all recognized keys, along with what they contr
   - Number in [0.0 - 2.0], though typical usage is 0.0 - 1.0.
   - Default: 0.8.
 
+- ms_timeout
+  - Milliseconds to wait before timing out in order to presume a downstream HTTP call may be crashed.  Note that this is the duration of the whole request.
+  - Defaults to 600000 (10 minutes).
+  - Timeout events are noted in the stdout log.
+  - If specified in a model, model value overrides the global value.
+
+- max_attempts
+  - Number of times to attempt each downstream HTTP call.  Before any timeout, the first call counts as 1 attempt.
+  - Defaults to 2.
+  - If specified in a model, model value overrides the global value.
+
 - server
   - An object containing settings for the HTTP server and path prefixes.
   - Keys within server:
@@ -109,6 +120,12 @@ Below is a complete reference of all recognized keys, along with what they contr
     - tools
       - An array of tool names (strings) that you have declared at config.tools.
       - The model will be able to make function calls referencing those tool names.
+
+    - max_attempts
+      - See top-level key max_attempts
+
+    - ms_timeout
+      - See top-level key ms_timeout.
 
     - context_size / max_tokens / output_limit
       - (Optional) Fields used by various model providers to specify maximum context length or maximum tokens in the response.
@@ -204,9 +221,6 @@ Alternatively, you may store your configuration file at a location of your choic
       "temperature": 0.8,
       "context_size": 8192,
       "output_limit": 2048,
-
-      "max_attempts": 2,
-      "ms_timeout": 600000,      // 10 minutes per request
 
       // Optional: system message
       "system": "You are a helpful assistant."
