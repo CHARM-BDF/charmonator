@@ -5,8 +5,7 @@ import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 
 const router = express.Router();
 
-router.get('/models', async (req, res) => {
-  try {
+function listModels() {
     const config = getConfig();
     
     // Extract model information from config
@@ -15,9 +14,12 @@ router.get('/models', async (req, res) => {
       name: model.name || id,
       description: model.description || ''
     }));
+    return { models }
+}
 
-    return res.json({ models });
-    
+router.get('/models', async (req, res) => {
+  try {
+    return res.json(listModels());
   } catch (error) {
     const j = jsonSafeFromException(err)
     console.error({"event":"Error listing models",
@@ -31,17 +33,7 @@ router.get('/models', async (req, res) => {
 // Alias endpoint: /options returns the same data as /models
 router.get('/options', async (req, res) => {
   try {
-    const config = getConfig();
-    
-    // Extract model information from config
-    const models = Object.entries(config.models || {}).map(([id, model]) => ({
-      id,
-      name: model.name || id,
-      description: model.description || ''
-    }));
-
-    return res.json({ models });
-    
+    return res.json(listModels());
   } catch (err) {
     const j = jsonSafeFromException(err)
     console.error({"event":"Error listing options",
