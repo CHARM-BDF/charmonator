@@ -16,7 +16,7 @@ router.get('/models', async (req, res) => {
       description: model.description || ''
     }));
 
-    res.json({ models });
+    return res.json({ models });
     
   } catch (error) {
     const j = jsonSafeFromException(err)
@@ -24,7 +24,7 @@ router.get('/models', async (req, res) => {
       stack: err.stack,
       errJson: j
     })
-    res.status(500).json(j);
+    return res.status(500).json(j);
   }
 });
 
@@ -40,7 +40,7 @@ router.get('/options', async (req, res) => {
       description: model.description || ''
     }));
 
-    res.json({ models });
+    return res.json({ models });
     
   } catch (err) {
     const j = jsonSafeFromException(err)
@@ -48,7 +48,7 @@ router.get('/options', async (req, res) => {
       stack: err.stack,
       errJson: j
     })
-    res.status(500).json(j);
+    return res.status(500).json(j);
   }
 });
 

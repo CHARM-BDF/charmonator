@@ -957,7 +957,7 @@ router.post('/', async (req, res) => {
       stack: err.stack,
       errJson: j
     })
-    res.status(500).json(j);
+    return res.status(500).json(j);
   }
 });
 
@@ -1031,7 +1031,7 @@ router.delete('/:jobId', (req, res) => {
     return res.status(404).json({ error: 'No such job_id' });
   }
   delete jobs[jobId];
-  res.json({ success: true });
+  return res.json({ success: true });
 });
 
 export default router;

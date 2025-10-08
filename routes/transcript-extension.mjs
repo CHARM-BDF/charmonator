@@ -73,7 +73,7 @@ router.post('/extension', async (req, res) => {
     );
 
     // Return the suffix as JSON
-    res.json(suffix.toJSON());
+    return res.json(suffix.toJSON());
 
   } catch (err) {
     const j = jsonSafeFromException(err)
@@ -81,7 +81,7 @@ router.post('/extension', async (req, res) => {
       stack: err.stack,
       errJson: j
     })
-    res.status(500).json(j);
+    return res.status(500).json(j);
   }
 });
 
