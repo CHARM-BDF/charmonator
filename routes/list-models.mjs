@@ -1,6 +1,7 @@
 // charmonator/routes/list-models.mjs
 import express from 'express';
 import { getConfig } from '../lib/config.mjs';
+import { getProviderName } from '../lib/core.mjs';
 import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 
 const router = express.Router();
@@ -12,6 +13,13 @@ function listModels() {
     const models = Object.entries(config.models || {}).map(([id, model]) => ({
       id,
       name: model.name || id,
+      model_type: model.model_type || '',
+      provider: getProviderName(model),
+      model: model.model || '',
+      deployment: model.deployment || '',
+      context_size: model.context_size || '',
+      max_tokens: model.max_tokens || '',
+      output_limit: model.output_limit || '',
       description: model.description || ''
     }));
     return { models }
