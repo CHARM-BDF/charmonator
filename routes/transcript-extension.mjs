@@ -114,10 +114,10 @@ router.post('/extension', async (req, res) => {
     }
 
     if (validOutput) {
-      res.json(validOutput)
+      return res.json(validOutput)
     } else {
       // 422, Unprocessable Content, https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/422
-      res.status(422).json({
+      return res.status(422).json({
         'error': 'The response could not be validated after multiple attempts.',
         'mostValidOutput': mostValidOutput,
         'finalResponse': suffix ? suffix.toJSON() : null
