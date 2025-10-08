@@ -3,6 +3,7 @@ import express from 'express';
 import { fetchChatModel } from '../lib/core.mjs';
 import { TranscriptFragment } from '../lib/transcript.mjs';
 import { FunctionTool } from '../lib/function.mjs';
+import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 
 const router = express.Router();
 
@@ -15,6 +16,8 @@ router.post('/extension', async (req, res) => {
       temperature,
       transcript: transcriptJson,
       tools,
+      ms_client_request_timeout = null,
+      max_attempts = null,
       // New: Accept an "options" object that can contain response_format, stream, etc.
       options
     } = req.body;
@@ -54,7 +57,12 @@ router.post('/extension', async (req, res) => {
     const incomingTranscript = TranscriptFragment.fromJSON(transcriptJson);
 
     // If no options object was provided, default to empty
-    const invocationOptions = options || {};
+    const options2 = options || {}
+    const invocationOptions = {
+      ...options2,
+      ms_client_request_timeout,
+      max_attempts
+    }
 
     // Generate response
     const suffix = await chatModel.extendTranscript(
@@ -65,15 +73,15 @@ router.post('/extension', async (req, res) => {
     );
 
     // Return the suffix as JSON
-    res.json(suffix.toJSON());
+    return res.json(suffix.toJSON());
 
-  } catch (error) {
-    console.error('Error extending transcript:', error);
-    // Expand all inner objects to a depth of 10 for debugging:
-    console.error('Transcript', JSON.stringify(transcriptCopy, null, 10));
-    res.status(500).json({
-      error: error.message || 'Internal server error'
-    });
+  } catch (err) {
+    const j = jsonSafeFromException(err)
+    console.error({"event":"Error extending transcript",
+      stack: err.stack,
+      errJson: j
+    })
+    return res.status(500).json(j);
   }
 });
 

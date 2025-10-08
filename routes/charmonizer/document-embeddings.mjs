@@ -4,6 +4,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { JSONDocument } from '../../lib/json-document.mjs';
 import { embedding } from '../../lib/core.mjs';
+import { jsonSafeFromException } from '../../lib/providers/provider_exception.mjs';
 
 /**
  * We'll store embedding jobs in-memory, keyed by job ID.
@@ -88,8 +89,12 @@ async function processEmbeddingAsync(job) {
     job.status = 'complete';
   } catch (err) {
     job.status = 'error';
-    job.error = String(err);
-    console.error('[Embeddings] job error:', err);
+    const j = jsonSafeFromException(err)
+    console.error({"event":"[Embeddings] job error",
+      stack: err.stack,
+      errJson: j
+    })
+    job.error = j;
   }
 }
 
@@ -126,15 +131,23 @@ router.post('/', (req, res) => {
     // run in background
     processEmbeddingAsync(job).catch(err => {
       job.status = 'error';
-      job.error = String(err);
-      console.error('[Embeddings] Async error in job:', err);
+      const j = jsonSafeFromException(err)
+      console.error({"event":"[Embeddings] Async error in job",
+        stack: err.stack,
+        errJson: j
+      })
+      job.error = j;
     });
 
     // return job id to client
     return res.status(202).json({ job_id: job.id });
-  } catch (error) {
-    console.error('[POST /embeddings] error:', error);
-    return res.status(500).json({ error: String(error) });
+  } catch (err) {
+    const j = jsonSafeFromException(err)
+    console.error({"event":"[POST /embeddings] error",
+      stack: err.stack,
+      errJson: j
+    })
+    return res.status(500).json({ error: j });
   }
 });
 

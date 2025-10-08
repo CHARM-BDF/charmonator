@@ -12,6 +12,7 @@ import { TranscriptFragment, Message, ImageAttachment } from '../lib/transcript.
 
 // [ADDED for .doc.json support]
 import { JSONDocument } from '../lib/json-document.mjs';
+import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 
 /**
  * Helper function to remove or mask large data URLs
@@ -248,19 +249,28 @@ router.post('/image', async (req, res) => {
     res.json(responsePayload);
 
   } catch (error) {
+    const j = jsonSafeFromException(error)
+    console.error({"event": "Error during /conversion/image",
+      stack: error.stack,
+      errJson: j
+    })
+    res.status(500).json(j);
+    return
+    // TODO: confirm that the above supersedes the below.
+    /*
     console.error('Error during /conversion/image:', error);
-    
+
     // Handle enhanced errors from providers
-    if (error.errorType && error.httpStatus && error.userMessage) {
+    if (error.interpretedErrorType && error.httpStatus && error.userMessage) {
       // This is an enhanced error from a provider
       const response = {
         error: error.userMessage,
-        errorType: error.errorType,
+        errorType: error.interpretedErrorType,
         provider: error.provider || 'unknown'
       };
       
       // Add additional context for specific error types
-      if (error.errorType === 'content_filter_violation') {
+      if (error.interpretedErrorType === 'content_filter_violation') {
         response.details = 'The image content was flagged by content filtering policies. Please ensure the image contains appropriate content and try again.';
       }
       
@@ -272,6 +282,7 @@ router.post('/image', async (req, res) => {
       error: error.message || 'An unexpected error occurred while transcribing the image.',
       errorType: 'unknown_error'
     });
+    */
   }
 });
 
@@ -328,9 +339,13 @@ router.post('/file', upload.single('file'), async (req, res) => {
     });
 
     res.json({ markdownContent });
-  } catch (error) {
-    console.error('Error converting file:', error);
-    res.status(500).json({ error: 'Error converting file.' });
+  } catch (err) {
+    const j = jsonSafeFromException(err)
+    console.error({"event":"Error converting file",
+      stack: err.stack,
+      errJson: j
+    })
+    res.status(500).json(j);
   }
 });
 

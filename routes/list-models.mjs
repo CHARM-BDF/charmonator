@@ -1,6 +1,7 @@
 // charmonator/routes/list-models.mjs
 import express from 'express';
 import { getConfig } from '../lib/config.mjs';
+import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 
 const router = express.Router();
 
@@ -15,13 +16,15 @@ router.get('/models', async (req, res) => {
       description: model.description || ''
     }));
 
-    res.json({ models });
+    return res.json({ models });
     
   } catch (error) {
-    console.error('Error listing models:', error);
-    res.status(500).json({
-      error: error.message || 'Internal server error'
-    });
+    const j = jsonSafeFromException(err)
+    console.error({"event":"Error listing models",
+      stack: err.stack,
+      errJson: j
+    })
+    return res.status(500).json(j);
   }
 });
 
@@ -37,13 +40,15 @@ router.get('/options', async (req, res) => {
       description: model.description || ''
     }));
 
-    res.json({ models });
+    return res.json({ models });
     
-  } catch (error) {
-    console.error('Error listing models:', error);
-    res.status(500).json({
-      error: error.message || 'Internal server error'
-    });
+  } catch (err) {
+    const j = jsonSafeFromException(err)
+    console.error({"event":"Error listing options",
+      stack: err.stack,
+      errJson: j
+    })
+    return res.status(500).json(j);
   }
 });
 

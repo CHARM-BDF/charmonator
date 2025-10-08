@@ -4,6 +4,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { fetchChatModel } from '../../lib/core.mjs';
 import { JSONDocument } from '../../lib/json-document.mjs';
+import { jsonSafeFromException } from '../../lib/providers/provider_exception.mjs';
 
 /**
  * We'll store summarization jobs in memory. For production, use a DB or persistent store.
@@ -173,6 +174,11 @@ If necessary, fill all required fields.
  */
 function createJobRecord(docObject, params) {
   const jobId = uuidv4();
+  const options = {
+    ...params.options,
+    ms_client_request_timeout: params.ms_client_request_timeout,
+    num_client_request_max_attempts: params.num_client_request_max_attempts
+  }
   jobs[jobId] = {
     id: jobId,
     status: 'pending',
@@ -181,6 +187,7 @@ function createJobRecord(docObject, params) {
 
     docObject, // the original doc
     ...params, // store summarization params
+    options,
 
     summarizedDoc: null, // final doc with summaries
 
@@ -248,7 +255,12 @@ async function processSummarizeAsync(job) {
     job.status = 'complete';
   } catch (err) {
     job.status = 'error';
-    job.error = String(err);
+    const j = jsonSafeFromException(err)
+    console.error({"event":"error POST /summaries setup",
+      stack: err.stack,
+      errJson: j
+    })
+    job.error = j;
   }
 }
 
@@ -315,8 +327,8 @@ async function runFullSummarization(job, topDoc) {
 
   // ADJUST so we wrap job.jsonSchema with type: 'json_schema'
   const options = job.jsonSchema
-    ? { response_format: { type: 'json_schema', json_schema: { name: 'forced-schema', schema: job.jsonSchema } } }
-    : {};
+    ? {...job.options, response_format: { type: 'json_schema', json_schema: { name: 'forced-schema', schema: job.jsonSchema } } }
+    : {...job.options};
 
   const assistantReply = await callLLM(chatModel, transcript, options);
   const finalData = parseLLMReply(assistantReply, job);
@@ -390,7 +402,7 @@ async function runMapSummarization(job, topDoc) {
       { role: 'user', content: userContent }
     ];
 
-    const assistantReply = await callLLM(chatModel, transcript);
+    const assistantReply = await callLLM(chatModel, transcript, job.options);
     const finalData = parseLLMReply(assistantReply, job);
 
     ensureAnnotations(thisChunkDoc._doc);
@@ -466,7 +478,7 @@ async function runFoldSummarization(job, topDoc) {
       { role: 'user', content: userContent }
     ];
 
-    const llmReply = await callLLM(chatModel, transcript);
+    const llmReply = await callLLM(chatModel, transcript, job.options);
     const finalObj = parseLLMReply(llmReply, job);
     accumulatedSummary = finalObj;
     job.chunks_completed++;
@@ -559,7 +571,7 @@ async function runDeltaFoldSummarization(job, topDoc) {
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent }
     ];
-    const llmReply = await callLLM(chatModel, transcript, options);
+    const llmReply = await callLLM(chatModel, transcript, job.options);
 
     const newDelta = parseLLMReply(llmReply, job);
 
@@ -683,7 +695,7 @@ async function runMapMergeSummarization(job, topDoc) {
       { role: 'user', content: userContent }
     ];
 
-    const assistantReply = await callLLM(chatModel, transcript);
+    const assistantReply = await callLLM(chatModel, transcript, job.options);
     const partialSummary = parseLLMReply(assistantReply, job);
 
     ensureAnnotations(thisChunkDoc._doc);
@@ -793,7 +805,7 @@ Please produce a single merged summary:
     { role: 'user', content: userContent }
   ];
 
-  const assistantReply = await callLLM(chatModel, transcript);
+  const assistantReply = await callLLM(chatModel, transcript, job.options);
   const merged = parseLLMReply(assistantReply, job);
 
   return merged;
@@ -874,6 +886,9 @@ router.post('/', async (req, res) => {
       annotation_field = 'summary',
       annotation_field_delta = 'summary_delta',
 
+      ms_client_request_timeout = null,
+      num_client_request_max_attempts = null,
+
       merge_summaries_guidance,
       merge_mode,
       budget,
@@ -910,6 +925,9 @@ router.post('/', async (req, res) => {
       annotation_field,
       annotation_field_delta,
 
+      ms_client_request_timeout,
+      num_client_request_max_attempts,
+
       merge_summaries_guidance: merge_summaries_guidance || '',
       merge_mode: merge_mode || 'left-to-right',
       
@@ -920,8 +938,12 @@ router.post('/', async (req, res) => {
     // run in background
     processSummarizeAsync(job).catch(err => {
       job.status = 'error';
-      job.error = String(err);
-      console.error('Summarize job error:', err);
+      const j = jsonSafeFromException(err)
+      console.error({"event":"error POST /summaries async",
+        stack: err.stack,
+        errJson: j
+      })
+      job.error = j;
     });
 
     // Return 202 with job ID
@@ -929,9 +951,13 @@ router.post('/', async (req, res) => {
       .status(202)
       .location(`/summaries/${job.id}`)
       .json({ job_id: job.id });
-  } catch (error) {
-    console.error('POST /summaries error:', error);
-    res.status(500).json({ error: String(error) });
+  } catch (err) {
+    const j = jsonSafeFromException(err)
+    console.error({"event":"error POST /summaries sync",
+      stack: err.stack,
+      errJson: j
+    })
+    return res.status(500).json(j);
   }
 });
 
@@ -1005,7 +1031,7 @@ router.delete('/:jobId', (req, res) => {
     return res.status(404).json({ error: 'No such job_id' });
   }
   delete jobs[jobId];
-  res.json({ success: true });
+  return res.json({ success: true });
 });
 
 export default router;
