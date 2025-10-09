@@ -471,13 +471,6 @@ async function runFoldSummarization(job, topDoc) {
   const beforeCount = parseInt(job.context_chunks_before || 0, 10);
   const afterCount = parseInt(job.context_chunks_after || 0, 10);
 
-  // Budget tracking variables
-  let budgetRemainingTokens = Number(job.budget) || null;
-  const wordsPerToken = new SmoothedRatioEstimator(0.75)
-  const statArray = new Array()
-
-  let chunksRemaining = chunkArray.length;
-
   for (let i = 0; i < chunkArray.length; i++) {
     const thisChunkDoc = new JSONDocument(chunkArray[i], topDoc);
 
@@ -628,13 +621,6 @@ async function runDeltaFoldSummarization(job, topDoc) {
   const beforeCount = parseInt(job.context_chunks_before || 0, 10);
   const afterCount = parseInt(job.context_chunks_after || 0, 10);
 
-  // Budget tracking variables
-  let budgetRemainingTokens = Number(job.budget) || null;
-  const wordsPerToken = new SmoothedRatioEstimator(0.75)
-  const statArray = new Array()
-
-  let chunksRemaining = chunkArray.length;
-
   for (let i = 0; i < chunkArray.length; i++) {
     const thisChunkDoc = new JSONDocument(chunkArray[i], topDoc);
 
@@ -665,22 +651,6 @@ async function runDeltaFoldSummarization(job, topDoc) {
     const chunkMetadata = JSON.stringify(thisChunkDoc._doc.metadata || {}, null, 2);
     const chunkText = `<chunk id="${thisChunkDoc._doc.id}">\n${thisChunkDoc.getResolvedContent()}\n</chunk>`;
 
-    let deltaArrayTmp = (
-      (i % 2) === 0
-      ? deltaArray
-      : job.perturb_accumulating_summary === "ablate"
-      ? deltaArray.filter((_, index) => index % 2 === 0)
-      : job.perturb_accumulating_summary === "stutter"
-      ? Array.from({length: deltaArray.length },  (_, index) => deltaArray[index % 5])
-      : deltaArray)
-    console.log(JSON.stringify({
-      event:"perturb_accumulating_summary",
-      perturb_accumulating_summary: job.perturb_accumulating_summary,
-      lengthBefore: deltaArray.length,
-      lengthAfter: deltaArrayTmp.length
-    }))
-    let stDeltaArray = JSON.stringify(deltaArrayTmp, null, 2)
-
     let userContent = `## Document ID: ${docId}\n`;
     userContent += `## Accumulating summary array (so far):\n${stDeltaArray}\n\n`;
     if (precedingText) {
@@ -691,23 +661,11 @@ async function runDeltaFoldSummarization(job, topDoc) {
       userContent += `\n\n---\n\n## Succeeding chunk(s):\n${succeedingText}`;
     }
 
-    // Apply budget tracking constraints if budget is set
-    let options = {...job.options};
-    let numTokensTarget = null;
-    let numWordsTarget = null;
-    if (budgetRemainingTokens != null && chunksRemaining > 0) {
-      numTokensTarget = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
-      numWordsTarget = wordsPerToken.ratio() * numTokensTarget;
-      // was: tokensToWords(perChunkTokenCap, tokensPerWord)
-      userContent = instructionsForWordBudget(numWordsTarget) + "\n\n" + userContent;
-      options.max_output_tokens = numTokensTarget;
-    }
-
     let transcript = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent }
     ];
-    const llmReply = await callLLM(chatModel, transcript, options);
+    const llmReply = await callLLM(chatModel, transcript, job.options);
 
     const newDelta = parseLLMReply(llmReply, job);
 
@@ -720,35 +678,10 @@ async function runDeltaFoldSummarization(job, topDoc) {
     } else {
       deltaArray.push(newDelta);
     }
-    
-    // Update budget tracking if budget is set
-    if (budgetRemainingTokens != null) {
-      const numTokensInputActual = tokenCount(thisChunkDoc.getResolvedContent())
-      const numTokensActual = typeof newDelta === 'string'
-        ? tokenCount(newDelta.trim())
-        : tokenCount(JSON.stringify(newDelta).trim());
-      statArray.push({
-        numTokensInputActual,
-        numTokensDeltaActual: tokenCount(stDeltaArray),
-        numTokensTarget,
-        numWordsTarget,
-        numTokensActual,
-        wordsPerToken: wordsPerToken.ratio(),
-        numTokensTotalTarget: Number(job.budget),
-        numTokensBudgetRemaning: budgetRemainingTokens,
-        iChunk: i,
-        chunksRemaining
-      })
-      wordsPerToken.tally(numWordsTarget, numTokensActual)
-      budgetRemainingTokens = Math.max(0, budgetRemainingTokens - numTokensActual);
-      chunksRemaining--;
-    }
-    
     job.chunks_completed++;
   }
 
   topDoc.setChunksForGroup(job.chunk_group, chunkArray);
-  topDoc.setChunksForGroup(job.chunk_group+"_stats", statArray)
   topDoc._doc.annotations[job.annotation_field] = deltaArray;
 }
 
