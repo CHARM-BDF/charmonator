@@ -380,17 +380,17 @@ POST /summaries
 
 - **Methods**: **`"full"`, `"map"`, `"fold"`, `"delta-fold"`, `"map-merge"`, or `"merge"`**.
   - `"full"` = single pass on the entire doc  
-  - `"map"` = summarize each chunk individually (optionally with some context from before/after each chunk)  
+  - `"map"` = summarize each chunk individually (optionally with some context from before/after each chunk) *(supports budget constraints)*
   - `"fold"` = iterative accumulation  
-  - `"delta-fold"` = iterative partial accumulation *(supports budget constraints)*
+  - `"delta-fold"` = iterative partial accumulation
   - `"map-merge"` = first summarize each chunk individually, then iteratively merge those chunk-level summaries  
   - **`"merge"`** = merges **pre-existing** chunk-level summaries into a single top-level summary; assumes each chunk already has a summary in `annotations[annotation_field]`.
 
-- **Budgeted Summarization** *(delta-fold only)*: When `budget` is specified, the system enforces token limits through:
+- **Budgeted Summarization** *(map only)*: When `budget` is specified, the system enforces token limits through:
   - **Dynamic allocation**: Budget is divided among remaining chunks (B/N tokens per chunk)
   - **Word constraints**: Prompts include soft word limits based on token budget
-  - **Hard token caps**: Provider-level `max_output_tokens` enforcement
   - **Real-time adjustment**: Budget reallocates after each chunk based on actual usage
+  - **Hard token caps**: Provider-level `max_output_tokens` enforcement (experimental)
 
 - **`merge_mode`** (string, optional) – **applies to `"merge"` and `"map-merge"`**:
   - `"left-to-right"` (default) – merges summaries in a simple linear pass  
@@ -439,23 +439,21 @@ POST /summaries
   "merge_summaries_guidance": "Explain how to combine partial summaries, preserving all points.",
 
   // Budget constraints (currently supported for "delta-fold" method only)
-  "budget": 1000,                 // optional, maximum tokens allowed for final summary
-  "tokens_per_word": 1.33         // optional, tokens per word ratio (default: 1.33)
+  "budget": 1000                  // optional, maximum tokens allowed for final summary
 }
 ```
 
-**Example: Budgeted Delta-Fold Summarization**
+**Example: Budgeted Map Summarization**
 
 ```jsonc
 {
   "document": { /* 10-page medical case document */ },
-  "method": "delta-fold",
+  "method": "map",
   "chunk_group": "pages",
   "model": "gpt-4o-mini",
   "guidance": "Provide concise clinical summaries focusing on key diagnostic findings.",
   "temperature": 0.3,
   "budget": 500,                  // Limit entire summary to 500 tokens
-  "tokens_per_word": 1.33,        // Standard conversion ratio
   "annotation_field": "clinical_summary"
 }
 ```
@@ -472,10 +470,9 @@ POST /summaries
 - **`json_sum`**: For `"delta-fold"`, how new deltas combine with the existing summary (usually `"append"`).  
 - **`initial_summary`**: For `"fold"` / `"delta-fold"`, seeds the accumulation.  
 - **`annotation_field`**: The doc-level or chunk-level annotations key where the summary is stored (default: `"summary"`).  
-- **`annotation_field_delta`**: For `"delta-fold"`, the chunk-level key for each partial "delta" (default: `"summary_delta"`).  
-- **`merge_summaries_guidance`**: (string) used by `"map-merge"` or `"merge"`, providing instructions on how to combine partial summaries.  
+- **`annotation_field_delta`**: For `"delta-fold"`, the chunk-level key for each partial "delta" (default: `"summary_delta"`).
+- **`merge_summaries_guidance`**: (string) used by `"map-merge"` or `"merge"`, providing instructions on how to combine partial summaries.
 - **`budget`**: (number, optional) Maximum tokens allowed for the final summary. Currently supported for `"delta-fold"` method only. When specified, the system dynamically allocates tokens across chunks using B/N allocation (remaining budget ÷ remaining chunks).  
-- **`tokens_per_word`**: (number, optional) Conversion ratio between tokens and words, used for budget calculations and word limit instructions. Defaults to 1.33. Only used when `budget` is specified.
 
 #### Immediate Response
 

@@ -16,28 +16,6 @@ const jobs = {};
  */
 
 /**
- * Convert tokens to words using the given ratio
- * @param {number} tokens - Number of tokens
- * @param {number} tokensPerWord - Tokens per word ratio (default 1.33)
- * @returns {number} - Number of words
- */
-function tokensToWords(tokens, tokensPerWord = 1.33) {
-  if (!tokens || tokens <= 0) return 0;
-  return Math.max(0, Math.floor(tokens / tokensPerWord));
-}
-
-/**
- * Convert words to tokens using the given ratio
- * @param {number} words - Number of words
- * @param {number} tokensPerWord - Tokens per word ratio (default 1.33)
- * @returns {number} - Number of tokens
- */
-function wordsToTokens(words, tokensPerWord = 1.33) {
-  if (!words || words <= 0) return 0;
-  return Math.max(0, Math.ceil(words * tokensPerWord));
-}
-
-/**
  * Add word budget instruction to text
  * @param {string} text - Original text
  * @param {number} wordLimit - Word limit
