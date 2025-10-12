@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.31.0",
+    "@anthropic-ai/vertex-sdk": "^0.4.0",
     "@babel/parser": "^7.26.5",
     "@babel/traverse": "^7.26.5",
     "@google/generative-ai": "^0.21.0",

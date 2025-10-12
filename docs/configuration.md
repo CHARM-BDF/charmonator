@@ -149,6 +149,8 @@ Below is a complete reference of all recognized keys, along with what they contr
        - Anthropic-specific:
          - model: e.g. "claude-2"
          - max_tokens: number of tokens to target, for instance 8192
+         - google_cloud_project: (Optional) If specified, uses Anthropic via Vertex AI on Google Cloud instead of direct Anthropic API
+         - google_cloud_region: (Optional) Google Cloud region, defaults to "us-east5" if using Vertex AI
 
        - (Planned) Google-specific:
          - no stable fields documented yet, but typically includes "model" (such as "gemini-2.0-xyz")
@@ -295,10 +297,44 @@ Here:
 ```
 
 Here:
-- `api`: `"Anthropic"` signals that we’re using the Anthropic client (Claude).
+- `api`: `"Anthropic"` signals that we're using the Anthropic client (Claude).
 - `api_key`: your Claude/Anthropic key.
 - `model`: e.g. `"claude-2"`, `"claude-instant-1"`, etc.
 - `max_tokens`: optional override for token usage.
+
+---
+
+### 3b) Example for **Anthropic via Vertex AI** (Claude on Google Cloud)
+
+```jsonc
+{
+  "models": {
+    "my-vertex-claude-model": {
+      "api": "Anthropic",
+      "model_type": "chat",
+
+      "google_cloud_project": "my-gcp-project-id",
+      "google_cloud_region": "us-central1",  // optional, defaults to "us-east5"
+      "model": "claude-3-5-sonnet@20240620",   // Vertex AI model version
+
+      "temperature": 0.8,
+      "max_tokens": 8192,
+
+      "system": "You are a helpful assistant with full knowledge of current events."
+    }
+  }
+}
+```
+
+Here:
+- `api`: `"Anthropic"` with `google_cloud_project` specified uses Anthropic via Vertex AI on Google Cloud.
+- `google_cloud_project`: your Google Cloud project ID.
+- `google_cloud_region`: the Google Cloud region where Claude is available (defaults to "us-east5").
+- `model`: the Vertex AI model version (e.g. `"claude-3-5-sonnet@20240620"`).
+- No `api_key` needed - authentication uses Google Cloud Application Default Credentials (ADC).
+- `max_tokens`: optional override for token usage.
+
+Note: You must have Google Cloud authentication configured (e.g., via `gcloud auth application-default login` or service account credentials).
 
 ---
 
