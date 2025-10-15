@@ -337,7 +337,7 @@ async function runMapSummarization(job, topDoc) {
   const afterCount = parseInt(job.context_chunks_after || 0, 10);
 
   // Budget tracking variables
-  let budgetRemainingTokens = Number(job.budget) || null;
+  let budgetRemainingTokens = Number(job.tokens_budget) || null;
   const wordsPerToken = new SmoothedRatioEstimator(0.75)
   const statArray = new Array()
   let chunksRemaining = chunkArray.length;
@@ -414,7 +414,7 @@ async function runMapSummarization(job, topDoc) {
         numWordsTarget,
         numTokensActual,
         wordsPerToken: wordsPerToken.ratio(),
-        numTokensTotalTarget: Number(job.budget),
+        numTokensTotalTarget: Number(job.tokens_budget),
         numTokensBudgetRemaning: budgetRemainingTokens,
         iChunk: i,
         chunksRemaining
@@ -525,7 +525,7 @@ async function runFoldSummarization(job, topDoc) {
         numWordsTarget,
         numTokensActual,
         wordsPerToken: wordsPerToken.ratio(),
-        numTokensTotalTarget: Number(job.budget),
+        numTokensTotalTarget: Number(job.tokens_budget),
         numTokensBudgetRemaning: budgetRemainingTokens,
         iChunk: i,
         chunksRemaining
@@ -926,7 +926,7 @@ const router = express.Router();
  *
  *   - merge_summaries_guidance: (string) used by "map-merge" and "merge" modes, with instructions for merging partial summaries
  *   - merge_mode: (string) either "left-to-right" (default) or "hierarchical" for how partial summaries are combined
- *   - budget: (number) optional, maximum tokens allowed for the final summary
+ *   - tokens_budget: (number) optional, maximum tokens allowed for the final summary
  */
 router.post('/', async (req, res) => {
   console.log(JSON.stringify({
@@ -955,7 +955,7 @@ router.post('/', async (req, res) => {
 
       merge_summaries_guidance,
       merge_mode,
-      budget,
+      tokens_budget,
       perturb_accumulating_summary
     } = req.body;
 
@@ -995,7 +995,7 @@ router.post('/', async (req, res) => {
       merge_summaries_guidance: merge_summaries_guidance || '',
       merge_mode: merge_mode || 'left-to-right',
       
-      budget: budget || null,
+      tokens_budget: tokens_budget || null,
       perturb_accumulating_summary: perturb_accumulating_summary || null
     });
 

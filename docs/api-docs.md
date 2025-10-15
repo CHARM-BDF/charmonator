@@ -386,11 +386,10 @@ POST /summaries
   - `"map-merge"` = first summarize each chunk individually, then iteratively merge those chunk-level summaries  
   - **`"merge"`** = merges **pre-existing** chunk-level summaries into a single top-level summary; assumes each chunk already has a summary in `annotations[annotation_field]`.
 
-- **Budgeted Summarization** *(map only)*: When `budget` is specified, the system enforces token limits through:
-  - **Dynamic allocation**: Budget is divided among remaining chunks (B/N tokens per chunk)
-  - **Word constraints**: Prompts include soft word limits based on token budget
-  - **Real-time adjustment**: Budget reallocates after each chunk based on actual usage
-  - **Hard token caps**: Provider-level `max_output_tokens` enforcement (experimental)
+- **Budgeted Summarization** *(map only)*:
+  - When `tokens_budget` is specified, the system dynamically modulates a length control prompt as each consecutive chunk is processed.
+  - Typical margin of error is plus or minus one chunk.
+  - Actual margin of error is prompt-dependent, and must be assessed and guarded by caller if needed.
 
 - **`merge_mode`** (string, optional) – **applies to `"merge"` and `"map-merge"`**:
   - `"left-to-right"` (default) – merges summaries in a simple linear pass  
@@ -439,7 +438,7 @@ POST /summaries
   "merge_summaries_guidance": "Explain how to combine partial summaries, preserving all points.",
 
   // Budget constraints (currently supported for "delta-fold" method only)
-  "budget": 1000                  // optional, maximum tokens allowed for final summary
+  "tokens_budget": 1000                  // optional, maximum tokens allowed for final summary
 }
 ```
 
@@ -453,7 +452,7 @@ POST /summaries
   "model": "gpt-4o-mini",
   "guidance": "Provide concise clinical summaries focusing on key diagnostic findings.",
   "temperature": 0.3,
-  "budget": 500,                  // Limit entire summary to 500 tokens
+  "tokens_budget": 500,                  // Limit entire summary to 500 tokens, +- one chunk
   "annotation_field": "clinical_summary"
 }
 ```
@@ -472,7 +471,7 @@ POST /summaries
 - **`annotation_field`**: The doc-level or chunk-level annotations key where the summary is stored (default: `"summary"`).  
 - **`annotation_field_delta`**: For `"delta-fold"`, the chunk-level key for each partial "delta" (default: `"summary_delta"`).
 - **`merge_summaries_guidance`**: (string) used by `"map-merge"` or `"merge"`, providing instructions on how to combine partial summaries.
-- **`budget`**: (number, optional) Maximum tokens allowed for the final summary. Currently supported for `"delta-fold"` method only. When specified, the system dynamically allocates tokens across chunks using B/N allocation (remaining budget ÷ remaining chunks).  
+- **`tokens_budget`**: (number, optional) Maximum tokens allowed for the final summary. Currently supported for `"map"` method only.
 
 #### Immediate Response
 
