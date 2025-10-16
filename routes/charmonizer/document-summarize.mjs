@@ -3,7 +3,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { fetchChatModel } from '../../lib/core.mjs';
-import { JSONDocument } from '../../lib/json-document.mjs';
+import { JSONDocument, tokenCount } from '../../lib/json-document.mjs';
 import { jsonSafeFromException } from '../../lib/providers/provider_exception.mjs';
 
 /**
@@ -16,38 +16,17 @@ const jobs = {};
  */
 
 /**
- * Convert tokens to words using the given ratio
- * @param {number} tokens - Number of tokens
- * @param {number} tokensPerWord - Tokens per word ratio (default 1.33)
- * @returns {number} - Number of words
- */
-function tokensToWords(tokens, tokensPerWord = 1.33) {
-  if (!tokens || tokens <= 0) return 0;
-  return Math.max(0, Math.floor(tokens / tokensPerWord));
-}
-
-/**
- * Convert words to tokens using the given ratio
- * @param {number} words - Number of words
- * @param {number} tokensPerWord - Tokens per word ratio (default 1.33)
- * @returns {number} - Number of tokens
- */
-function wordsToTokens(words, tokensPerWord = 1.33) {
-  if (!words || words <= 0) return 0;
-  return Math.max(0, Math.ceil(words * tokensPerWord));
-}
-
-/**
  * Add word budget instruction to text
  * @param {string} text - Original text
  * @param {number} wordLimit - Word limit
  * @param {number} tokenApprox - Approximate tokens
  * @returns {string} - Text with budget instruction
  */
-function addWordBudgetInstruction(text, wordLimit, tokenApprox) {
-  if (!wordLimit) return text;
-  const budgetLine = `\n\n[Constraint] Your response must be at most ${wordLimit} words.`;
-  return text + budgetLine;
+function instructionsForWordBudget(wordLimit) {
+  const r2 = Math.sqrt(2)
+  const [xMin, xMax] = [Math.round(wordLimit / r2), Math.round(wordLimit * r2)];
+  const budgetLine = `<constraint> Do not use more than ${xMax} words.  Do not use less than ${xMin} words. </constraint>`;
+  return budgetLine;
 }
 
 /**
@@ -75,6 +54,7 @@ You will produce a summary for exactly one chunk.
 (You may also be given some preceding chunks for context, and possibly succeeding chunks.)
 
 When summarizing, follow the provided guidance.
+If the user prompt contains <constrant>...</constraint>, follow those instructions as well.
 
 <guidance>
 <user-provided guidance>
@@ -356,6 +336,12 @@ async function runMapSummarization(job, topDoc) {
   const beforeCount = parseInt(job.context_chunks_before || 0, 10);
   const afterCount = parseInt(job.context_chunks_after || 0, 10);
 
+  // Budget tracking variables
+  let budgetRemainingTokens = Number(job.tokens_budget) || null;
+  const wordsPerToken = new SmoothedRatioEstimator(0.75)
+  const statArray = new Array()
+  let chunksRemaining = chunkArray.length;
+
   for (let i = 0; i < chunkArray.length; i++) {
     const thisChunkDoc = new JSONDocument(chunkArray[i], topDoc);
 
@@ -397,6 +383,17 @@ async function runMapSummarization(job, topDoc) {
       userContent += `\n\n---\n\n## Succeeding chunk(s):\n${succeedingText}`;
     }
 
+    // Apply budget tracking constraints if budget is set
+    let options = {};
+    let numTokensTarget = null;
+    let numWordsTarget = null;
+    if (budgetRemainingTokens != null && chunksRemaining > 0) {
+      numTokensTarget = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
+      numWordsTarget = wordsPerToken.ratio() * numTokensTarget;
+      userContent = instructionsForWordBudget(numWordsTarget) + "\n\n" + userContent;
+      options.max_output_tokens = numTokensTarget;
+    }
+
     const transcript = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent }
@@ -405,6 +402,28 @@ async function runMapSummarization(job, topDoc) {
     const assistantReply = await callLLM(chatModel, transcript, job.options);
     const finalData = parseLLMReply(assistantReply, job);
 
+    // Update budget tracking if budget is set
+    if (budgetRemainingTokens != null) {
+      const numTokensInputActual = tokenCount(thisChunkDoc.getResolvedContent())
+      const numTokensActual = typeof finalData === 'string'
+        ? tokenCount(finalData.trim())
+        : tokenCount(JSON.stringify(finalData).trim());
+      statArray.push({
+        numTokensInputActual,
+        numTokensTarget,
+        numWordsTarget,
+        numTokensActual,
+        wordsPerToken: wordsPerToken.ratio(),
+        numTokensTotalTarget: Number(job.tokens_budget),
+        numTokensBudgetRemaning: budgetRemainingTokens,
+        iChunk: i,
+        chunksRemaining
+      })
+      wordsPerToken.tally(numWordsTarget, numTokensActual)
+      budgetRemainingTokens = Math.max(0, budgetRemainingTokens - numTokensActual);
+      chunksRemaining--;
+    }
+
     ensureAnnotations(thisChunkDoc._doc);
     thisChunkDoc._doc.annotations[job.annotation_field] = finalData;
     chunkArray[i] = thisChunkDoc.toObject();
@@ -412,6 +431,7 @@ async function runMapSummarization(job, topDoc) {
     job.chunks_completed++;
   }
   topDoc.setChunksForGroup(job.chunk_group, chunkArray);
+  topDoc.setChunksForGroup(job.chunk_group+"_stats", statArray)
 }
 
 /**
@@ -473,6 +493,17 @@ async function runFoldSummarization(job, topDoc) {
       userContent += `\n\n---\n\n## Succeeding chunk(s):\n${succeedingText}`;
     }
 
+    // Apply budget tracking constraints if budget is set
+    let options = {};
+    let numTokensTarget = null;
+    let numWordsTarget = null;
+    if (budgetRemainingTokens != null && chunksRemaining > 0) {
+      numTokensTarget = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
+      numWordsTarget = wordsPerToken.ratio() * numTokensTarget;
+      userContent = instructionsForWordBudget(numWordsTarget) + "\n\n" + userContent;
+      options.max_output_tokens = numTokensTarget;
+    }
+
     let transcript = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent }
@@ -481,11 +512,67 @@ async function runFoldSummarization(job, topDoc) {
     const llmReply = await callLLM(chatModel, transcript, job.options);
     const finalObj = parseLLMReply(llmReply, job);
     accumulatedSummary = finalObj;
+
+    // Update budget tracking if budget is set
+    if (budgetRemainingTokens != null) {
+      const numTokensInputActual = tokenCount(thisChunkDoc.getResolvedContent())
+      const numTokensActual = typeof finalObj === 'string'
+        ? tokenCount(finalObj.trim())
+        : tokenCount(JSON.stringify(finalObj).trim());
+      statArray.push({
+        numTokensInputActual,
+        numTokensTarget,
+        numWordsTarget,
+        numTokensActual,
+        wordsPerToken: wordsPerToken.ratio(),
+        numTokensTotalTarget: Number(job.tokens_budget),
+        numTokensBudgetRemaning: budgetRemainingTokens,
+        iChunk: i,
+        chunksRemaining
+      })
+      wordsPerToken.tally(numWordsTarget, numTokensActual)
+      budgetRemainingTokens = Math.max(0, budgetRemainingTokens - numTokensActual);
+      chunksRemaining--;
+    }
+
     job.chunks_completed++;
   }
 
   ensureAnnotations(topDoc._doc);
+  topDoc.setChunksForGroup(job.chunk_group+"_stats", statArray)
   topDoc._doc.annotations[job.annotation_field] = accumulatedSummary;
+}
+
+class SmoothedRatioEstimator {
+  // Low brow explanation: Hack to estimate a ratio online while never dividing by zero.
+  //
+  // High brow explanation: Implements a deliberately constrained case Additive Smoothing
+  // aka Laplace Smoothing.  The constructor initializes aTotal to 1. This choice is
+  // effectively a special case of Laplace smoothing for a two‐outcome distribution: one
+  // “pseudocount” is placed on the denominator, and some user‐chosen “pseudocount” is
+  // placed on the numerator.
+  //
+  // The The reason that we hard-code the pseudocount to 1 is to roll off the prior
+  // as soon as we have successfully avoided the zero denominator scenario.
+  constructor(initialB) {
+    this.bTotal = initialB;
+    this.aTotal = 1;
+  }
+
+  tally(b, a) {
+    if (b < 0) {
+      throw new Error("b must be >= 0");
+    }
+    if (a < 0) {
+      throw new Error("a must be >= 0");
+    }
+    this.bTotal += b;
+    this.aTotal += a;
+  }
+
+  ratio() {
+    return this.bTotal / this.aTotal;
+  }
 }
 
 /**
@@ -511,12 +598,6 @@ async function runDeltaFoldSummarization(job, topDoc) {
   const docId = topDoc._doc.id || '(no-id)';
   const beforeCount = parseInt(job.context_chunks_before || 0, 10);
   const afterCount = parseInt(job.context_chunks_after || 0, 10);
-
-  // Budget tracking variables
-  const totalBudgetTokens = Number(job.budget) || null;
-  const tokensPerWord = Number(job.tokens_per_word) || 1.33;
-  let budgetRemainingTokens = totalBudgetTokens;
-  let chunksRemaining = chunkArray.length;
 
   for (let i = 0; i < chunkArray.length; i++) {
     const thisChunkDoc = new JSONDocument(chunkArray[i], topDoc);
@@ -549,22 +630,13 @@ async function runDeltaFoldSummarization(job, topDoc) {
     const chunkText = `<chunk id="${thisChunkDoc._doc.id}">\n${thisChunkDoc.getResolvedContent()}\n</chunk>`;
 
     let userContent = `## Document ID: ${docId}\n`;
-    userContent += `## Accumulating summary array (so far):\n${JSON.stringify(deltaArray, null, 2)}\n\n`;
+    userContent += `## Accumulating summary array (so far):\n${stDeltaArray}\n\n`;
     if (precedingText) {
       userContent += `## Preceding chunk(s):\n${precedingText}\n\n---\n\n`;
     }
     userContent += `## Current chunk metadata:\n${chunkMetadata}\n\n## Current chunk:\n${chunkText}`;
     if (succeedingText) {
       userContent += `\n\n---\n\n## Succeeding chunk(s):\n${succeedingText}`;
-    }
-
-    // Apply budget constraints if budget is set
-    let options = {};
-    if (budgetRemainingTokens != null && chunksRemaining > 0) {
-      const perChunkTokenCap = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
-      const perChunkWordCap = tokensToWords(perChunkTokenCap, tokensPerWord);
-      userContent = addWordBudgetInstruction(userContent, perChunkWordCap, perChunkTokenCap);
-      options.max_output_tokens = perChunkTokenCap;
     }
 
     let transcript = [
@@ -584,17 +656,6 @@ async function runDeltaFoldSummarization(job, topDoc) {
     } else {
       deltaArray.push(newDelta);
     }
-    
-    // Update budget tracking if budget is set
-    if (budgetRemainingTokens != null) {
-      const wordsUsed = typeof newDelta === 'string'
-        ? newDelta.trim().split(/\s+/).length
-        : JSON.stringify(newDelta).trim().split(/\s+/).length;
-      const tokensUsed = wordsToTokens(wordsUsed, tokensPerWord);
-      budgetRemainingTokens = Math.max(0, budgetRemainingTokens - tokensUsed);
-      chunksRemaining--;
-    }
-    
     job.chunks_completed++;
   }
 
@@ -865,10 +926,13 @@ const router = express.Router();
  *
  *   - merge_summaries_guidance: (string) used by "map-merge" and "merge" modes, with instructions for merging partial summaries
  *   - merge_mode: (string) either "left-to-right" (default) or "hierarchical" for how partial summaries are combined
- *   - budget: (number) optional, maximum tokens allowed for the final summary
- *   - tokens_per_word: (number) optional, tokens per word ratio (default: 1.33)
+ *   - tokens_budget: (number) optional, maximum tokens allowed for the final summary
  */
 router.post('/', async (req, res) => {
+  console.log(JSON.stringify({
+    "event":"request",
+    "url":"/summaries"+req.url,
+    "body":req.body}))
   try {
     let {
       document,
@@ -891,8 +955,8 @@ router.post('/', async (req, res) => {
 
       merge_summaries_guidance,
       merge_mode,
-      budget,
-      tokens_per_word
+      tokens_budget,
+      perturb_accumulating_summary
     } = req.body;
 
     if (!document || !method) {
@@ -931,8 +995,8 @@ router.post('/', async (req, res) => {
       merge_summaries_guidance: merge_summaries_guidance || '',
       merge_mode: merge_mode || 'left-to-right',
       
-      budget: budget || null,
-      tokens_per_word: tokens_per_word || 1.33
+      tokens_budget: tokens_budget || null,
+      perturb_accumulating_summary: perturb_accumulating_summary || null
     });
 
     // run in background

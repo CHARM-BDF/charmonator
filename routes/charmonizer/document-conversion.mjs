@@ -213,6 +213,10 @@ const router = express.Router();
  *  GET /documents/:jobId/result
  */
 router.post('/documents', upload.single('file'), async (req, res) => {
+  console.log(JSON.stringify({
+    "event":"request",
+    "url":"/documents"+req.url,
+    "body":req.body}))
   try {
     const {
       ocr_threshold = 0.7,
