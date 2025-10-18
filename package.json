@@ -6,6 +6,7 @@
   "scripts": {
     "test": "./node_modules/.bin/mocha --tags \"not:llm\" test/**/*.spec.mjs",
     "test:all": "./node_modules/.bin/mocha  test/**/*.spec.mjs",
+    "test:myfavorite": "node ./node_modules/mocha/bin/mocha  --grep \"list available models\"",
     "postinstall": "mkdir -p test/data && touch test/data/05-versions-space.pdf  # pdf-parse workaround"
   },
   "keywords": [],
