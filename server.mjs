@@ -9,6 +9,7 @@ import cors from 'cors';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
+import util from 'util';
 import { createRequire } from 'module';
 
 import { setGlobalConfigFile, getConfig, getServerPort, getBaseUrl, getFullCharmonatorApiPrefix, getFullCharmonizerApiPrefix } from './index.mjs';
@@ -59,7 +60,12 @@ async function main() {
   try {
     // send console.error to stdout
     console.error = (...args) => {
-      process.stdout.write(args.join(' ') + '\n');
+      if (args.length == 1 && args[0] instanceof Object) {
+        process.stdout.write(JSON.stringify(args[0]) + '\n');
+      } else {
+        // do what the original code did
+        process.stdout.write(util.format(...args) + '\n');
+      }
     };
 
     // 1) Read config
