@@ -19,6 +19,10 @@ const modelForTranscription = 'my-openai-vmodel';
 const baseCharmonatorUrl = `http://localhost:${__port}/api/charmonator/v1`;
 const baseCharmonizerUrl = `http://localhost:${__port}/api/charmonizer/v1`;
 
+// A unitless constant converting the expected time on a good day to
+// the upper bound time for failing a test.
+const timeoutMargin = 5;
+
 async function pollForComplete(urlStatus, urlResult) {
   while (true) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -71,7 +75,7 @@ tags().describe('testAllCharmonatorEndpoints', function() {
 
   tags('llm').it('should convert image to markdown with llm', async function() {
     const url = `${baseCharmonatorUrl}/conversion/image`
-    this.timeout(60000);
+    this.timeout(13000*timeoutMargin);
     const imgB64 = fs.readFileSync(pngPath).toString('base64');
     const body = {
       imageUrl: `data:image/png;base64,${imgB64}`,
@@ -89,9 +93,8 @@ tags().describe('testAllCharmonatorEndpoints', function() {
   });
 
   // NOTE: this endpoint does not OCR!!
-  tags('llm').it('should convert pdf to markdown synchronously without OCR', async function() {
+  it('should convert pdf to markdown synchronously without OCR', async function() {
     const url = `${baseCharmonatorUrl}/conversion/file`
-    this.timeout(10000);
     const form = new FormData();
     form.append('file', fs.createReadStream(pdfPath));
     form.append('ocr_threshold', "1.0")
@@ -124,7 +127,7 @@ tags().describe('testAllCharmonatorEndpoints', function() {
 tags().describe('testAllCharmonizerEndpoints', function() {
   tags('llm').it('should convert pdf to doc object with LLM (long-running)', async function() {
     const url = `${baseCharmonizerUrl}/conversions/documents`
-    this.timeout(30000);
+    this.timeout(24000*timeoutMargin);
     const form = new FormData();
     form.append('file', fs.createReadStream(pdfPath));
     // optionally specify a model if we want fallback
@@ -147,7 +150,7 @@ tags().describe('testAllCharmonizerEndpoints', function() {
 
   tags('llm').it('should convert pdf to doc object without LLM (long-running)', async function() {
     const url = `${baseCharmonizerUrl}/conversions/documents`
-    this.timeout(30000);
+    this.timeout(5000*timeoutMargin);
     const form = new FormData();
     form.append('file', fs.createReadStream(pdfPath));
     // optionally specify a model if we want fallback
@@ -170,7 +173,7 @@ tags().describe('testAllCharmonizerEndpoints', function() {
 
   tags('llm').it('should summarize a doc object (long-running)', async function() {
     const url = `${baseCharmonizerUrl}/summaries`
-    this.timeout(10000);
+    this.timeout(2000*timeoutMargin);
     // For simplicity, reuse a minimal doc object
     const minimalDoc = {
       id: 'test-doc-1',
@@ -199,6 +202,7 @@ tags().describe('testAllCharmonizerEndpoints', function() {
 
   tags('llm').it('should compute embeddings for a doc object (long-running)', async function() {
     const url = `${baseCharmonizerUrl}/embeddings`
+    this.timeout(2000*timeoutMargin)
     const minimalDoc = {
       id: 'test-doc-2',
       content: 'Another set of text to embed.'
@@ -224,7 +228,7 @@ tags().describe('testAllCharmonizerEndpoints', function() {
 
   it('should chunk a doc object', async function() {
     const url = `${baseCharmonizerUrl}/chunkings`
-    this.timeout(30000);
+    this.timeout(2000*timeoutMargin);
     const minimalDoc = {
       id: 'test-doc-chunk',
       content: 'This text is somewhat long and we want to break it into chunks.'
