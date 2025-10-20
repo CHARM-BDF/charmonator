@@ -12,6 +12,8 @@ const __dirname = path.dirname(__filename);
 const __port = 5003;
 const pdfPath = path.join(__dirname, 'data', 'OMIM_660661.pdf');
 const pngPath = path.join(__dirname, 'data', 'OMIM_660661.png');
+// TODO: replace hack hard-coded model names with configuration that will
+// work on anyone's machine, modulo the right assumptions.
 const modelForChat = 'my-openai-model';
 const modelForEmbeddings = 'my-openai-emodel';
 const modelForTranscription = 'my-openai-vmodel';
