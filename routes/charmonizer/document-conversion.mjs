@@ -549,7 +549,10 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
       } catch (pageError) {
         console.error(`[Page ${i + 1}] Processing failed:`, pageError.message);
         
-        if (jobRec.continue_on_failure) {
+        if (pageError instanceof ProviderException
+          && pageError.interpretedErrorType == 'content_filter_violation'
+          && jobRec.continue_on_failure)
+        {
           console.log(`[Page ${i + 1}] Creating error placeholder due to --continue-on-failure flag`);
           pageChunk = createErrorPage(i, pageError, jobRec);
           pageChunk.start = currentStart;
