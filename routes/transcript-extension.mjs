@@ -137,8 +137,23 @@ router.post('/extension', async (req, res) => {
         res.json(suffix.toJSON())
         return;
       }
-      const data = JSON.parse(suffix.toJSON().messages[0].content)
-      const isValid = validateAgainstSchema(data, schema);
+      console.log(JSON.stringify({"event":"received response",
+        "response": suffix.toJSON()
+      }))
+      let data = null
+      let isValid = !schema
+      try {
+        data = suffix.toJSON().messages[0].content
+        if(schema) {
+            data = JSON.parse(data)
+            isValid = validateAgainstSchema(data, schema);
+        }
+      } catch(err) {
+        console.error({
+          "event":"Error extending transcript: parsing json",
+          "bytes": data ? data.length : 0
+        })
+      }
       /*
       // Example of how to exercise "attempting repair"
       const schema2 = JSON.parse(JSON.stringify(schema))
