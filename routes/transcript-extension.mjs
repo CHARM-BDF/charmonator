@@ -37,7 +37,7 @@ router.post('/extension', async (req, res) => {
       tools,
       client_tools,  // New: array of client-side tool schemas
       ms_client_request_timeout = null,
-      max_attempts = null,
+      num_client_request_max_attempts = null,
       // New: Accept an "options" object that can contain response_format, stream, etc.
       options
     } = req.body;
@@ -115,7 +115,7 @@ router.post('/extension', async (req, res) => {
     const invocationOptions = {
       ...options2,
       ms_client_request_timeout,
-      max_attempts,
+      num_client_request_max_attempts,
       abort_signal: abortController.signal
     }
 
