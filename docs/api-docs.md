@@ -104,7 +104,7 @@ POST api/charmonator/v1/transcript/extension
   - Ephemeral schema-only tools for the model to call.
 - **`client_tools`** (array, optional): Schema-only tools that the *client* will execute. The model may emit `tool_call` messages for these; the client must respond with `tool_response` messages and call `/tools/execute` only for server/MCP tools.
 - **`ms_client_request_timeout`** (number, optional): Override configured time limit for downstream HTTP client calls, in milliseconds.  See [configuration.md](configuration.md#top-level-keys) for details.
-- **`max_timeout`** (number, optional): Override configured number of attempts for each downstream HTTP client call.  See [configuration.md](configuration.md#top-level-keys) for details.
+- **`num_client_request_max_attempts`** (number, optional): Override configured number of attempts for each downstream HTTP client call.  See [configuration.md](configuration.md#top-level-keys) for details.
 - **`options`** (object, optional):  
   - **`stream`** (boolean, optional): If `true`, the server may return partial chunks.  
   - **`response_format`** (object, optional): If supported, requests the model output in a specific format (e.g., JSON mode or structured JSON schema).  
