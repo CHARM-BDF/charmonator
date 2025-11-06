@@ -421,7 +421,7 @@ async function runMapSummarization(job, topDoc) {
         numTokensActual,
         wordsPerToken: wordsPerToken.ratio(),
         numTokensTotalTarget: Number(job.tokens_budget),
-        numTokensBudgetRemaning: budgetRemainingTokens,
+        numTokensBudgetRemaining: budgetRemainingTokens,
         iChunk: i,
         chunksRemaining
       })
