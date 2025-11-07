@@ -2,6 +2,7 @@ import express from 'express';
 import { fetchChatModel } from '../lib/core.mjs';
 import { TranscriptFragment } from '../lib/transcript.mjs';
 import { FunctionTool } from '../lib/function.mjs';
+import { validateAgainstSchema, requestToRepair } from '../lib/schema-validation.mjs';
 import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 import { ToolKind, ToolDefinition } from '../lib/tool-definition.mjs';
 import { toolRegistry } from '../lib/tools.mjs';
@@ -166,26 +167,8 @@ router.post('/extension', async (req, res) => {
         validOutput = suffix.toJSON();
         break;
       } else if (attempt < (numAttempts - 1)) {
-        mostValidOutput = data;
         console.log(JSON.stringify({"event": "attempting repair", attempt, numAttempts, "data":suffix.toJSON()}))
-        const incorrectResponse = JSON.stringify(suffix.toJSON(), null, 2);
-        const validationErrors = JSON.stringify(msgsError, null, 2);
-        invocationOptions.repairs = `
-          We have tried to use Structured Output to decode the following JSON Response.
-          However, the Response does not yet correspond to its JsonSchema.
-          We have observed the ValidationErrors.
-          Fix the Response so that it is fully valid according to JsonSchema, while preserving as much of its content as is reasonably possible.
-          <Response>
-          \`\`\`json
-          ${incorrectResponse}
-          \`\`\`
-          </Response>
-          <ValidationErrors>
-          \`\`\`json
-          ${validationErrors}
-          \`\`\`
-          </ValidationErrors>
-        `;
+        invocationOptions.repairs = requestToRepair(suffix, msgsError)
       }
     }
 
@@ -219,16 +202,5 @@ router.post('/extension', async (req, res) => {
     res.off('close', onDisconnect);
   }
 });
-
-function validateAgainstSchema(response, schema) {
-  const ajv = new Ajv();
-  const validate = ajv.compile(schema);
-  const isValid = validate(response);
-  if(isValid) return []
-  const msgs = validate.errors
-  if(!msgs || msgs.length <= 0)
-    console.error("Assertion violation: !msgs || msgs.length <= 0")
-  return msgs
-}
 
 export default router;
