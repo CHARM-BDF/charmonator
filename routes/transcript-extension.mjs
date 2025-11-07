@@ -142,11 +142,13 @@ router.post('/extension', async (req, res) => {
       }))
       let data = null
       let isValid = !schema
+      let msgsError = []
       try {
         data = suffix.toJSON().messages[0].content
         if(schema) {
             data = JSON.parse(data)
-            isValid = validateAgainstSchema(data, schema);
+            msgsError = validateAgainstSchema(data, schema);
+            isValid = msgsError.length <= 0
         }
       } catch(err) {
         console.error({
@@ -167,15 +169,22 @@ router.post('/extension', async (req, res) => {
         mostValidOutput = data;
         console.log(JSON.stringify({"event": "attempting repair", attempt, numAttempts, "data":suffix.toJSON()}))
         const incorrectResponse = JSON.stringify(suffix.toJSON(), null, 2);
+        const validationErrors = JSON.stringify(msgsError, null, 2);
         invocationOptions.repairs = `
           We have tried to use Structured Output to decode the following JSON Response.
           However, the Response does not yet correspond to its JsonSchema.
+          We have observed the ValidationErrors.
           Fix the Response so that it is fully valid according to JsonSchema, while preserving as much of its content as is reasonably possible.
           <Response>
           \`\`\`json
           ${incorrectResponse}
           \`\`\`
           </Response>
+          <ValidationErrors>
+          \`\`\`json
+          ${validationErrors}
+          \`\`\`
+          </ValidationErrors>
         `;
       }
     }
@@ -214,7 +223,12 @@ router.post('/extension', async (req, res) => {
 function validateAgainstSchema(response, schema) {
   const ajv = new Ajv();
   const validate = ajv.compile(schema);
-  return validate(response);
+  const isValid = validate(response);
+  if(isValid) return []
+  const msgs = validate.errors
+  if(!msgs || msgs.length <= 0)
+    console.error("Assertion violation: !msgs || msgs.length <= 0")
+  return msgs
 }
 
 export default router;
