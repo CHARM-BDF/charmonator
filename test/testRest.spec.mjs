@@ -12,11 +12,10 @@ const __dirname = path.dirname(__filename);
 const __port = 5003;
 const pdfPath = path.join(__dirname, 'data', 'OMIM_610661.pdf');
 const pngPath = path.join(__dirname, 'data', 'OMIM_610661.png');
-// TODO: replace hack hard-coded model names with configuration that will
-// work on anyone's machine, modulo the right assumptions.
-const modelForChat = 'my-openai-model';
-const modelForEmbeddings = 'my-openai-emodel';
-const modelForTranscription = 'my-openai-vmodel';
+
+const modelForChat = 'my-unittest-model';
+const modelForEmbeddings = 'my-unittest-emodel';
+const modelForTranscription = 'my-unittest-model';
 
 const baseCharmonatorUrl = `http://localhost:${__port}/api/charmonator/v1`;
 const baseCharmonizerUrl = `http://localhost:${__port}/api/charmonizer/v1`;
@@ -55,10 +54,11 @@ tags().describe('testAllCharmonatorEndpoints', function() {
 
   tags('llm').it('should extend transcript', async function() {
     const url = `${baseCharmonatorUrl}/transcript/extension`
+    this.timeout(2000*timeoutMargin);
     const body = {
       model: modelForChat,
       system: 'You are a helpful test system.',
-      temperature: 0.1,
+      temperature: 0.0,
       transcript: {
         messages: [
           { role: 'user', content: 'Hello. How are you?' }
