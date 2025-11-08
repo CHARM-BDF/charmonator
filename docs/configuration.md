@@ -404,3 +404,37 @@ When building a complete `config.json`, you may also include:
 - optional fields like `"system"`, `"temperature"`, `"tools"`, etc.
 
 The snippet examples above should get you started for each major backend.
+
+# Unit Testing
+
+To run the unit tests, a set of two models are expected for performing the essential operations.  The following suffices:
+```
+  "my-unittest-model": {
+    "api": "OpenAI",
+    "model_type": "chat",
+    "model": "o3",
+    "deployment": "o3",
+    "api_version": "2024-12-01-preview",
+    "reasoning_effort": "low",
+    "context_size": 128000,
+    "output_limit": 16384
+  },
+  "my-unittest-emodel": {
+    "api": "OpenAI",
+    "model_type": "chat",
+    "model": "text-embedding-3-small",
+    "temperature": 0.8,
+    "context_size": 8192,
+    "output_limit": 2048
+  }
+```
+
+The server must be running in the background before running tests:
+```
+  node server.mjs &
+```
+
+The essential CLI commands are documented in package json.  Run them with:
+```
+  npm run test...
+```

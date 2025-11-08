@@ -43,6 +43,63 @@ async function pollForComplete(urlStatus, urlResult) {
   return [finalData, finalRes];
 }
 
+function getModelsUrl() {
+  return `${baseCharmonatorUrl}/models`;
+}
+
+async function getModels() {
+  let isUp = false;
+  const url = getModelsUrl()
+
+  // Try up to 5 times (adjust as needed)
+  for (let i = 0; i < 5; i++) {
+    try {
+      const r = await fetch(url);
+      if(r) return r
+    } catch (err) {
+      // Ignore the error, and try again
+    }
+    // Wait 1 second before the next attempt
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+
+  if (!isUp) {
+    throw new Error(`Please check that the application server is running. (1)  Could not reach ${url}`)
+  }
+}
+
+function hasModel(data, modelname) {
+  if(!data || !data["models"]) {
+    return false
+  }
+  const models = data["models"]
+  for(const model of models) {
+    if(model && model["id"] == modelname) {
+      return true
+    }
+  }
+  return false
+}
+
+describe('My REST tests', function() {
+  before(async function() {
+    const url = getModelsUrl()
+    let r = await getModels()
+    if(!(r.status >= 200 && r.status < 300)) {
+      throw new Error(`Please check that the application server is running. (2)  Could not reach ${url}`)
+    }
+    const data = await r.json();
+    if(!hasModel(data, modelForChat)) {
+      throw new Error(`Server configuration is missing required configuration.  See docs/configuration.md.  missing_model=${modelForChat}.`)
+    }
+    if(!hasModel(data, modelForEmbeddings)) {
+      throw new Error(`Server configuration is missing required configuration.  See docs/configuration.md.  missing_model=${modelForTranscription}.`)
+    }
+    if(!hasModel(data, modelForTranscription)) {
+      throw new Error(`Server configuration is missing required configuration.  See docs/configuration.md.  missing_model=${modelForEmbeddings}.`)
+    }
+  });
+
 tags().describe('testAllCharmonatorEndpoints', function() {
   it('should list available models', async function() {
     const url = `${baseCharmonatorUrl}/models`;
@@ -257,4 +314,5 @@ tags().describe('testAllCharmonizerEndpoints', function() {
     assert(finalRes.status >= 200 && finalRes.status < 300);
     assert(Array.isArray(finalDoc.chunks), 'Should have a chunks array');
   });
+});
 });
