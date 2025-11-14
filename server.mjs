@@ -10,6 +10,7 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import util from 'util';
+import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
 import { setGlobalConfigFile, getConfig, getServerPort, getBaseUrl, getFullCharmonatorApiPrefix, getFullCharmonizerApiPrefix } from './index.mjs';
@@ -35,7 +36,6 @@ import embeddingsRouter from './routes/charmonizer/document-embeddings.mjs';
 
 import chunkingsRouter from './routes/charmonizer/document-chunkings.mjs';
 
-
 const require = createRequire(import.meta.url);
 
 // Multer setup for file uploads
@@ -56,7 +56,7 @@ const upload = multer({
   },
 });
 
-async function main() {
+export async function createAndStart() {
   try {
     // send console.error to stdout
     console.error = (...args) => {
@@ -166,15 +166,25 @@ async function main() {
     app.use(CHARMONIZER_API_PREFIX + '/chunkings', chunkingsRouter);
 
     // Start listening
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+    return new Promise((resolve, reject) => {
+      // Start listening
+      const server = app.listen(PORT, err => {
+        if (err) {
+          return reject(err);
+        }
+        console.log(`Server running on port ${PORT}`);
+        resolve(server);
+      });
     });
-
   } catch (error) {
     console.error('Startup error:', error);
     process.exit(1);
   }
 }
 
-// Kick off
-main();
+const currentFilePath = fileURLToPath(import.meta.url);
+if (process.argv[1] === currentFilePath) {
+  // Kick off
+  await createAndStart();
+}
+

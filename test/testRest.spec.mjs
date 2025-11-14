@@ -5,6 +5,7 @@ import fs from 'fs';
 import FormData from 'form-data';
 import fetch from 'node-fetch';
 import { fileURLToPath } from 'url';
+import { createAndStart } from '../server.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -82,7 +83,10 @@ function hasModel(data, modelname) {
 }
 
 describe('My REST tests', function() {
+  let server;
+
   before(async function() {
+    server = await createAndStart()
     const url = getModelsUrl()
     let r = await getModels()
     if(!(r.status >= 200 && r.status < 300)) {
@@ -99,6 +103,12 @@ describe('My REST tests', function() {
       throw new Error(`Server configuration is missing required configuration.  See docs/configuration.md.  missing_model=${modelForEmbeddings}.`)
     }
   });
+
+  after(async function() {
+    await new Promise(resolve => {
+      server.close(resolve);
+    });
+  })
 
   tags().describe('testAllCharmonatorEndpoints', function() {
     it('should list available models', async function() {
