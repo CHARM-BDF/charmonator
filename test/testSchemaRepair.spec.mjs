@@ -76,6 +76,8 @@ tags().describe('Test schema repair', function() {
   // Create one Mocha "it" test per instance-file
   it(`should repair a nonconformant answer`, async function() {
     this.timeout(msTimeout); 
+    const pathLog = path.join(__dirname, path.basename(__filename)+".log")
+    const fdLog = fs.openSync(pathLog, "w")
     const testPairs = loadSchemaInstancePairs(dir_data);
     for (const { schemaPath, instancePath, schemaData, instanceData } of testPairs) {
       // Prepare the user prompt, which includes the text: "Copy this data"
@@ -129,10 +131,11 @@ tags().describe('Test schema repair', function() {
       // Validate result against the schema
       const errors = validateAgainstSchema(parsedOutput, schemaData);
       assert(errors.length === 0, `Output does not match schema. Errors: ${JSON.stringify(errors)}`);
-      console.log(JSON.stringify({
+      fs.writeSync(fdLog, JSON.stringify({
         input: instanceData,
         output: parsedOutput
       }, null, 2))
+      fs.fsyncSync(fdLog)
       // Check size requirement: output is at least 90% of original instance's size
       const originalSize = JSON.stringify(instanceData).length;
       const returnedSize = JSON.stringify(parsedOutput).length;
