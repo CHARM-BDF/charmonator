@@ -5,6 +5,7 @@ import fs from 'fs';
 import fetch from 'node-fetch';
 import { fileURLToPath } from 'url';
 import { validateAgainstSchema, requestToRepair } from '../lib/schema-validation.mjs';
+import { createAndStart } from '../lib/server.mjs';
 import Ajv from 'ajv';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -73,6 +74,17 @@ const msTimeout = 600000 // TODO: iteration, timeoutMargin
 const dir_data = path.join(__dirname, 'data', 'schema_repair');
 
 tags().describe('Test schema repair', function() {
+  let server;
+
+  before(async function () {
+    server = await createAndStart()
+  })
+
+  after(async function() {
+    await new Promise(resolve => {
+      server.close(resolve);
+    });
+  })
   // Create one Mocha "it" test per instance-file
   it(`should repair a nonconformant answer`, async function() {
     this.timeout(msTimeout); 
