@@ -79,6 +79,7 @@ tags().describe('Test schema repair', function() {
     const pathLog = path.join(__dirname, path.basename(__filename)+".log")
     const fdLog = fs.openSync(pathLog, "w")
     const testPairs = loadSchemaInstancePairs(dir_data);
+    let numTotalRepairAttempts = 0
     for (const { schemaPath, instancePath, schemaData, instanceData } of testPairs) {
       // Prepare the user prompt, which includes the text: "Copy this data"
       const userContent = `Copy this data:\n${JSON.stringify(instanceData, null, 2)}`;
@@ -116,6 +117,9 @@ tags().describe('Test schema repair', function() {
 
       // The transcript returned by /transcript/extension typically has { messages: [...] }
       const jsonRes = await resp.json();
+
+      const numRepairAttempts = resp.headers.get('x-num-repair-attempts')
+      numTotalRepairAttempts += numRepairAttempts
       // The bot’s response should be in the last message (adjust to your actual structure)
       const assistantMessage = jsonRes.messages?.[jsonRes.messages.length - 1]?.content;
 
@@ -133,7 +137,8 @@ tags().describe('Test schema repair', function() {
       assert(errors.length === 0, `Output does not match schema. Errors: ${JSON.stringify(errors)}`);
       fs.writeSync(fdLog, JSON.stringify({
         input: instanceData,
-        output: parsedOutput
+        output: parsedOutput,
+        numAttempts: numRepairAttempts
       }, null, 2))
       fs.fsyncSync(fdLog)
       // Check size requirement: output is at least 90% of original instance's size

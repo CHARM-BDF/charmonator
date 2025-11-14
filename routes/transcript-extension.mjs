@@ -7,7 +7,6 @@ import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 import { ToolKind, ToolDefinition } from '../lib/tool-definition.mjs';
 import { toolRegistry } from '../lib/tools.mjs';
 import { mcpManager } from '../lib/mcp/mcp-manager.mjs';
-import Ajv from 'ajv';
 
 const router = express.Router();
 
@@ -125,7 +124,8 @@ router.post('/extension', async (req, res) => {
     let validOutput = null;
     let mostValidOutput = null;
     let suffix = null;
-    for (let attempt = 0; attempt < numAttempts; attempt++) {
+    let attempt = 0;
+    for (attempt = 0; attempt < numAttempts; attempt++) {
       suffix = await chatModel.extendTranscript(
         incomingTranscript,
         null,
@@ -187,6 +187,7 @@ router.post('/extension', async (req, res) => {
         validOutput = suffix.toJSON();
         break;
       } else if (attempt < (numAttempts - 1)) {
+        mostValidOutput = data;
         console.log(JSON.stringify({"event": "attempting repair", attempt, numAttempts, "data":suffix.toJSON()}))
         invocationOptions.repairs = requestToRepair(suffix, msgsError)
       }
@@ -195,6 +196,7 @@ router.post('/extension', async (req, res) => {
     if (abortController.signal.aborted || res.destroyed) {
       return;
     }
+    res.set('x-num-repair-attempts', String(attempt));
     if (validOutput) {
       return res.json(validOutput);
     }
