@@ -95,7 +95,7 @@ tags().describe('Test schema repair', function() {
     let brief = []
     for (const { schemaPath, instancePath, schemaData, instanceData } of testPairs) {
       // Prepare the user prompt, which includes the text: "Copy this data"
-      const userContent = `Copy this data:\n${JSON.stringify(instanceData, null, 2)}`;
+      const promptHackTest = `Copy this data:\n${JSON.stringify(instanceData, null, 2)}`;
 
       // Post to the existing /transcript/extension endpoint
       const url = `${baseUrl}/transcript/extension`;
@@ -105,7 +105,7 @@ tags().describe('Test schema repair', function() {
         temperature: 0.0,
         transcript: {
           messages: [
-            { role: 'user', content: userContent }
+            { role: 'user', content: promptHackTest }
           ]
         },
         options: {
@@ -185,12 +185,26 @@ tags().describe('Test schema repair', function() {
         item.sizeOk
       );
     };
+    // The 0-1 threshold indicates whether or not the repair prompt was needed at all.  In an
+    // ideal test fixturing, we would build a way to bypass the transcript extension API and go
+    // straight to schema repair, but instead we use promptHackTest, and that means we need to
+    // do this cleanup.  But it would be more code, and for an unclear benefit.  What does it
+    // mean if prommptHackTest gets through schema validation first try?  To me it seems that
+    // the the test input is not difficult enough for the model under test, there's no way
+    // we would have known that other than to have gathered the test example and seen it pass,
+    // and there is no action we need to take to resolve any problem.
+    const numAttemptsTotal = brief.reduce((acc, b) => (b["numAttempts"] >= 1 ? b["numAttempts"]-1 : 0) + acc, 0)
     if(!allOk) {
       console.log({
         "event": "schema repair test",
         brief
       });
       assert(allOk)
+    } else {
+      console.log({
+        "event": "schema repair test",
+        numFixesTotal: numAttemptsTotal
+      });
     }
   });
 });
