@@ -177,10 +177,20 @@ tags().describe('Test schema repair', function() {
       }, null, 2)+"\n")
       fs.fsyncSync(fdLog)
     }
-    // TODO: determine a failure threshold
-    console.log({
-      "event": "schema repair test",
-      brief
-    });
+    const allOk = (data) => {
+      return brief.every(item =>
+        item.httpOk &&
+        item.parseOk &&
+        item.errorsOk &&
+        item.sizeOk
+      );
+    };
+    if(!allOk) {
+      console.log({
+        "event": "schema repair test",
+        brief
+      });
+      assert(allOk)
+    }
   });
 });
