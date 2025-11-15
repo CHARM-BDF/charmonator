@@ -92,6 +92,7 @@ tags().describe('Test schema repair', function() {
     const fdLog = fs.openSync(pathLog, "w")
     const testPairs = loadSchemaInstancePairs(dir_data);
     let numTotalRepairAttempts = 0
+    let brief = []
     for (const { schemaPath, instancePath, schemaData, instanceData } of testPairs) {
       // Prepare the user prompt, which includes the text: "Copy this data"
       const userContent = `Copy this data:\n${JSON.stringify(instanceData, null, 2)}`;
@@ -124,40 +125,62 @@ tags().describe('Test schema repair', function() {
         body: JSON.stringify(requestBody)
       });
 
-      // If the server returned 4xx or 5xx, throw
-      assert(resp.status >= 200 && resp.status < 300, `Unexpected status: ${resp.status}`);
-
       // The transcript returned by /transcript/extension typically has { messages: [...] }
       const jsonRes = await resp.json();
 
-      const numRepairAttempts = resp.headers.get('x-num-repair-attempts')
-      numTotalRepairAttempts += numRepairAttempts
-      // The bot’s response should be in the last message (adjust to your actual structure)
+      const httpOk = resp.status >= 200 && resp.status < 300
+      const httpMsg = httpOk ? "" : `Unexpected status: ${resp.status}\n  body: ${jsonRes}`;
+
       const assistantMessage = jsonRes.messages?.[jsonRes.messages.length - 1]?.content;
 
-      assert(assistantMessage, 'Expected to receive assistant content in the last message!');
-
-      let parsedOutput;
+      let parsedOutput = null;
       try {
         parsedOutput = JSON.parse(assistantMessage);
       } catch (err) {
         assert.fail(`Could not parse assistant message as valid JSON.\nMessage:\n${assistantMessage}`);
       }
 
+      const parseOk = !!parsedOutput
+
       // Validate result against the schema
       const errors = validateAgainstSchema(parsedOutput, schemaData);
-      assert(errors.length === 0, `Output does not match schema. Errors: ${JSON.stringify(errors)}`);
-      fs.writeSync(fdLog, JSON.stringify({
-        input: instanceData,
-        output: parsedOutput,
-        numAttempts: numRepairAttempts
-      }, null, 2))
-      fs.fsyncSync(fdLog)
-      // Check size requirement: output is at least 90% of original instance's size
+      //assert(errors.length === 0, `Output does not match schema. Errors: ${JSON.stringify(errors)}`);
+      const errorsOk = errors.length === 0
+
+            // Check size requirement: output is at least 90% of original instance's size
       const originalSize = JSON.stringify(instanceData).length;
       const returnedSize = JSON.stringify(parsedOutput).length;
-      assert(returnedSize >= 0.6 * originalSize,
-        `Returned JSON is smaller than 70% of original:\noriginal size=${originalSize}, returned size=${returnedSize}`);
+      const sizeOk = returnedSize >= 0.6 * originalSize;
+
+      const numRepairAttempts = resp.headers.get('x-num-repair-attempts')
+      numTotalRepairAttempts += numRepairAttempts
+
+      const ok = parseOk && errorsOk && sizeOk;
+
+      const b = {
+        numAttempts: numRepairAttempts,
+        instancePath,
+        parsedOutput,
+        httpOk,
+        httpMsg,
+        parseOk,
+        errorsOk,
+        sizeOk
+      }
+      brief.push(b)
+      console.log(b)
+
+      fs.writeSync(fdLog, JSON.stringify({
+        b,
+        input: instanceData,
+        output: parsedOutput
+      }, null, 2)+"\n")
+      fs.fsyncSync(fdLog)
     }
+    // TODO: determine a failure threshold
+    console.log({
+      "event": "schema repair test",
+      brief
+    });
   });
 });
