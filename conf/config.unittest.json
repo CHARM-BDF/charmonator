@@ -1,0 +1,24 @@
+{
+  "max_attempts": 3,
+  "ms_client_request_timeout": 600001,
+  "models": {
+    "my-unittest-model": {
+        "api": "OpenAI",
+        "model_type": "chat",
+        "model": "o3",
+        "deployment": "o3",
+        "api_version": "2024-12-01-preview",
+        "reasoning_effort": "low",
+        "context_size": 128000,
+        "output_limit": 16384
+    },
+    "my-unittest-emodel": {
+      "api": "OpenAI",
+      "model_type": "chat",
+      "model": "text-embedding-3-small",
+      "temperature": 0.8,
+      "context_size": 8192,
+      "output_limit": 2048
+    }
+  }
+}
