@@ -69,7 +69,6 @@ export async function createAndStart() {
     };
 
     // 1) Read config
-    setGlobalConfigFile('./conf/config.json');
     const config = getConfig();
 
     // 2) Build tool definitions from the top-level "tools"
