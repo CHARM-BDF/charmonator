@@ -14,7 +14,7 @@ import pdfParse from 'pdf-parse';
 // For fallback LLM-based extraction:
 import { imageToMarkdown } from '../../lib/core.mjs';
 import { scrutinizeViaDiff2 } from '../../lib/scrutinize.mjs';
-import { jsonSafeFromException } from '../../lib/providers/provider_exception.mjs';
+import { jsonSafeFromException, ProviderException } from '../../lib/providers/provider_exception.mjs';
 
 /**
  * We'll store job data in memory for demonstration.
