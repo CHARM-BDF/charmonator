@@ -1,189 +1,120 @@
 /* file: server.mjs */
 
 /*
- * Launches an instance of the RESTful charmonator/charmonizer server.
- */
+Why is lib/server.mjs a separate file you ask?
 
-import express from 'express';
-import cors from 'cors';
-import multer from 'multer';
-import fs from 'fs';
-import path from 'path';
-import util from 'util';
-import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
+provider: openai
+prompt: |
+    I try to reuse my server.mjs file main program from unit tests with a createAndStart() function.
 
-import { setGlobalConfigFile, getConfig, getServerPort, getBaseUrl, getFullCharmonatorApiPrefix, getFullCharmonizerApiPrefix } from './index.mjs';
+    This works for running from bash and running from mocha.
 
-// For handling externally defined tools:
-import { loadToolDefinitionsFromConfig, initModelTools } from './lib/tool-loader.mjs';
-import { toolRegistry } from './lib/tools.mjs';
+    However, under pm2, some kind of dynamic import is used which changes the value of argv[1].
 
-// For handling modular apps:
-import { loadAppsFromConfig, mountApps } from './lib/app-loader.mjs';
+    What is the appropriate way to test if we are being run as a main program that works for all three methods of invocation (mocha test, bash, pm2)?
 
-import embeddingRouter from './routes/embedding.mjs';
-import transcriptExtensionRouter from './routes/transcript-extension.mjs';
-import listModelsRouter from './routes/list-models.mjs';
-import charmonatorConversionRouter from './routes/conversion-router.mjs';
+            const currentFilePath = fileURLToPath(import.meta.url);
+            console.log({
+              "event":"startup",
+              url: import.meta.url,
+              currentFilePath,
+              argv1: process.argv[1]
+              })
+            if (process.argv[1] === currentFilePath) {
+              // Kick off
+              await createAndStart();
+            }
+        =>
+            1|charmonator  | {
+            1|charmonator  |   event: 'startup',
+            1|charmonator  |   url: 'file:///Users/udnadmin/usr/code/projects/charmonator/server.mjs',
+            1|charmonator  |   currentFilePath: '/Users/udnadmin/usr/code/projects/charmonator/server.mjs',
+            1|charmonator  |   argv1: '/Users/udnadmin/.local/lib/node_modules/pm2/lib/ProcessContainerFork.js'
+            1|charmonator  | }
+response: |
+    Unfortunately, there isn't a foolproof single-file "ES-module equivalent" of if (require.main === module) that always works under Node, Mocha, and PM2. In particular, PM2 often spawns your code via a wrapper script (ProcessContainerFork.js), which breaks the usual "compare process.argv[1] to import.meta.url" approach.
 
-// Charmonizer routes for doc conversions, etc.
-import documentConversionsRouter from './routes/charmonizer/document-conversion.mjs';
+    ---------------------------------------------------
+    1) The usual pattern (and why it fails under PM2)
+    ---------------------------------------------------
 
-import summarizeRouter from './routes/charmonizer/document-summarize.mjs';
+    For many ESM scripts, you will see something like:
 
-import embeddingsRouter from './routes/charmonizer/document-embeddings.mjs';
+      import { fileURLToPath } from 'node:url';
+      import { createAndStart } from './lib.js';
 
-import chunkingsRouter from './routes/charmonizer/document-chunkings.mjs';
+      const scriptPath = fileURLToPath(import.meta.url);
 
-const require = createRequire(import.meta.url);
-
-// Multer setup for file uploads
-const upload = multer({
-  dest: 'uploads/',
-  limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowedExtensions = [
-      '.txt', '.md', '.docx', '.pdf', '.py', '.js', '.java', '.c', '.cpp', '.cs',
-      '.rb', '.go', '.rs', '.php', '.html', '.css', '.json', '.xml', '.sh', '.bat',
-    ];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedExtensions.includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`File extension not allowed: ${file.originalname}`));
-    }
-  },
-});
-
-export async function createAndStart() {
-  try {
-    // send console.error to stdout
-    console.error = (...args) => {
-      if (args.length == 1 && args[0] instanceof Object) {
-        process.stdout.write(JSON.stringify(args[0]) + '\n');
-      } else {
-        // do what the original code did
-        process.stdout.write(util.format(...args) + '\n');
-      }
-    };
-
-    // 1) Read config
-    const config = getConfig();
-
-    // 2) Build tool definitions from the top-level "tools"
-    const definitions = loadToolDefinitionsFromConfig(config);
-
-    // 3) Initialize all model tools
-    await initModelTools(config, definitions);
-    console.log('All Registered Tools:', Array.from(toolRegistry.tools.keys()));
-
-    // 4) Load modular apps
-    await loadAppsFromConfig(config);
-    console.log('Apps loaded successfully');
-
-    // 5) Now proceed with server setup:
-    const BASE_URL = getBaseUrl();
-    const CHARMONATOR_API_PREFIX = getFullCharmonatorApiPrefix();
-    const CHARMONIZER_API_PREFIX = getFullCharmonizerApiPrefix();
-    const PORT = getServerPort();
-
-    console.log("Charmonator API path prefix: ", CHARMONATOR_API_PREFIX);
-    console.log("Charmonizer API path prefix: ", CHARMONIZER_API_PREFIX);
-    console.log("Charmonator server port: ", PORT);
-
-    const app = express();
-    app.use(cors());
-    app.use(BASE_URL + '/', express.static('public'));
-    app.use(BASE_URL + '/src', express.static('static/src'));
-
-    // Allow large JSON bodies
-    app.use(express.json({ limit: '50mb' }));
-
-    // Example debug logging middleware
-    app.use((req, res, next) => {
-      console.log(`[server.mjs] ${req.method} ${req.url}`);
-      next();
-    });
-
-    // Verbose logging middleware: print a snapshot of all requests with parameters if --verbose is passed
-    if (process.argv.includes('--verbose')) {
-      // Helper function to truncate strings or recursively process objects
-      function truncateValue(value, maxLen = 200) {
-        if (typeof value === 'string') {
-          return value.length > maxLen ? value.slice(0, maxLen) + '... [truncated]' : value;
-        } else if (Array.isArray(value)) {
-          return value.map(item => truncateValue(item, maxLen));
-        } else if (value && typeof value === 'object') {
-          const truncatedObj = {};
-          for (const key in value) {
-            truncatedObj[key] = truncateValue(value[key], maxLen);
-          }
-          return truncatedObj;
-        }
-        return value;
+      // 'Typical' check: if launched directly from CLI (node myScript.mjs):
+      if (process.argv[1] === scriptPath) {
+        createAndStart();
       }
 
-      app.use((req, res, next) => {
-        const requestSnapshot = {
-          method: req.method,
-          url: req.url,
-          query: truncateValue(req.query),
-          params: truncateValue(req.params),
-          body: truncateValue(req.body),
-          // For file uploads handled by multer, log only metadata
-          file: req.file
-            ? { originalname: req.file.originalname, size: req.file.size }
-            : undefined,
-          files: req.files
-            ? req.files.map(file => ({ originalname: file.originalname, size: file.size }))
-            : undefined,
-        };
+    This logic works when a user directly types node myScript.mjs or when mocha is told to run that exact file. But under PM2, process.argv[1] is typically /path/to/ProcessContainerFork.js (the PM2 wrapper), not your scriptPath, so the comparison fails.
 
-        console.log('Request Snapshot:', requestSnapshot);
-        next();
-      });
-    }
+    ---------------------------------------------------
+    2) The recommended fix: separate "library" vs. "runner"
+    ---------------------------------------------------
 
-    // Charmonator endpoints:
-    app.use(CHARMONATOR_API_PREFIX, listModelsRouter);
+    Rather than trying to detect "am I main?" in the same file, a more robust solution is:
 
-    app.use(CHARMONATOR_API_PREFIX + '/embedding', embeddingRouter);
+     • Put all startup logic into a function (createAndStart).
+     • Create a separate small CLI entry point (e.g. cli.mjs) that imports your code and calls createAndStart.
+     • Point PM2, Mocha, and your bash scripts at cli.mjs when you actually want to run the service.
 
-    app.use(CHARMONATOR_API_PREFIX + "/transcript", transcriptExtensionRouter);
-    app.use(CHARMONATOR_API_PREFIX + "/conversion", charmonatorConversionRouter);
+    Example folder structure:
 
-    // Mount modular apps (routes and static files)
-    mountApps(app);
+      ├── server.mjs
+      ├── cli.mjs
+      └── test/
+          └── test_server.mjs
 
-    // Charmonizer document conversion routes:
-    app.use(CHARMONIZER_API_PREFIX + "/conversions", documentConversionsRouter);
+    Then:
 
-    // Charmonizer document summarization routes:
-    app.use(CHARMONIZER_API_PREFIX + '/summaries', summarizeRouter);
-    app.use(CHARMONIZER_API_PREFIX + '/embeddings', embeddingsRouter);
-    app.use(CHARMONIZER_API_PREFIX + '/chunkings', chunkingsRouter);
+    server.mjs:
 
-    // Start listening
-    return new Promise((resolve, reject) => {
-      // Start listening
-      const server = app.listen(PORT, err => {
-        if (err) {
-          return reject(err);
-        }
-        console.log(`Server running on port ${PORT}`);
-        resolve(server);
-      });
-    });
-  } catch (error) {
-    console.error('Startup error:', error);
-    process.exit(1);
-  }
-}
+      // Library code only
+      export async function createAndStart() {
+        // your logic
+      }
 
-const currentFilePath = fileURLToPath(import.meta.url);
-if (process.argv[1] === currentFilePath) {
-  // Kick off
-  await createAndStart();
-}
+    cli.mjs:
+
+      import { createAndStart } from './server.mjs';
+      createAndStart();
+
+    test/test_server.mjs:
+
+      import { createAndStart } from '../server.mjs';
+      // or import { somethingToTest } from '../server.mjs';
+      // and run your tests without needing to guess whether it's "main."
+
+    Now you:
+
+     • Run from bash with node cli.mjs.
+     • Under Mocha, either import server.mjs or test a function from server.mjs.
+     • Under PM2, do pm2 start cli.mjs (or specify node cli.mjs in your process config).
+
+    In all cases, you avoid the fragile "which file is in process.argv[1]?" check. Instead, you either call createAndStart() from a dedicated CLI or import it in tests.
+
+    ---------------------------------------------------
+    3) Why separate files is the surest method
+    ---------------------------------------------------
+
+    In Node's ESM world, there is no built-in import.meta.main or require.main-style fallback that always tells you unambiguously "I am the user-run entry file." Various tools (Mocha, PM2, bundlers, and so on) can launch your code through intermediate scripts or loaders that break process.argv assumptions.
+
+    Hence the simplest and most reliable pattern is:
+
+     • Put all real logic into a library module.
+     • Have a tiny "runner" file that calls that logic when you actually mean "start the service now."
+     • Point PM2 and your shell scripts at the runner.
+     • Tests just import your library logic directly.
+
+    This avoids having to do any uncertain environment sniffing and works uniformly in Bash, Mocha, PM2, or any other environment that can import or run a Node script.
+*/
+
+import { createAndStart } from './lib/server.mjs';
+
+// Kick off
+await createAndStart();
 

@@ -5,7 +5,7 @@ import fs from 'fs';
 import FormData from 'form-data';
 import fetch from 'node-fetch';
 import { fileURLToPath } from 'url';
-import { createAndStart } from '../server.mjs';
+import { createAndStart } from '../lib/server.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
