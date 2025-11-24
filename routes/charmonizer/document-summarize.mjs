@@ -405,9 +405,13 @@ async function runMapSummarization(job, topDoc) {
     // Update budget tracking if budget is set
     if (budgetRemainingTokens != null) {
       const numTokensInputActual = tokenCount(thisChunkDoc.getResolvedContent())
-      const numTokensActual = typeof finalData === 'string'
-        ? tokenCount(finalData.trim())
-        : tokenCount(JSON.stringify(finalData).trim());
+      const finalDataSafeToCount =
+        typeof finalData === 'string'
+          ? finalData.trim()
+          : finalData
+            ? JSON.stringify(finalData).trim()
+            : '';
+     const numTokensActual = tokenCount(finalDataSafeToCount);
       statArray.push({
         numTokensInputActual,
         numTokensTarget,
