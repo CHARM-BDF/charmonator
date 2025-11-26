@@ -28,7 +28,7 @@ function listModels() {
 router.get('/models', async (req, res) => {
   try {
     return res.json(listModels());
-  } catch (error) {
+  } catch (err) {
     const j = jsonSafeFromException(err)
     console.error({"event":"Error listing models",
       stack: err.stack,

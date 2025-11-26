@@ -600,7 +600,7 @@ async function runDeltaFoldSummarization(job, topDoc) {
     const chunkText = `<chunk id="${thisChunkDoc._doc.id}">\n${thisChunkDoc.getResolvedContent()}\n</chunk>`;
 
     let userContent = `## Document ID: ${docId}\n`;
-    userContent += `## Accumulating summary array (so far):\n${stDeltaArray}\n\n`;
+    userContent += `## Accumulating summary array (so far):\n${JSON.stringify(deltaArray, null, 2)}\n\n`;
     if (precedingText) {
       userContent += `## Preceding chunk(s):\n${precedingText}\n\n---\n\n`;
     }
