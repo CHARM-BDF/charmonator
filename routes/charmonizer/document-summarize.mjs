@@ -405,9 +405,13 @@ async function runMapSummarization(job, topDoc) {
     // Update budget tracking if budget is set
     if (budgetRemainingTokens != null) {
       const numTokensInputActual = tokenCount(thisChunkDoc.getResolvedContent())
-      const numTokensActual = typeof finalData === 'string'
-        ? tokenCount(finalData.trim())
-        : tokenCount(JSON.stringify(finalData).trim());
+      const finalDataSafeToCount =
+        typeof finalData === 'string'
+          ? finalData.trim()
+          : finalData
+            ? JSON.stringify(finalData).trim()
+            : '';
+     const numTokensActual = tokenCount(finalDataSafeToCount);
       statArray.push({
         numTokensInputActual,
         numTokensTarget,
@@ -493,17 +497,6 @@ async function runFoldSummarization(job, topDoc) {
       userContent += `\n\n---\n\n## Succeeding chunk(s):\n${succeedingText}`;
     }
 
-    // Apply budget tracking constraints if budget is set
-    let options = {};
-    let numTokensTarget = null;
-    let numWordsTarget = null;
-    if (budgetRemainingTokens != null && chunksRemaining > 0) {
-      numTokensTarget = Math.max(0, Math.floor(budgetRemainingTokens / chunksRemaining));
-      numWordsTarget = wordsPerToken.ratio() * numTokensTarget;
-      userContent = instructionsForWordBudget(numWordsTarget) + "\n\n" + userContent;
-      options.max_output_tokens = numTokensTarget;
-    }
-
     let transcript = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent }
@@ -513,33 +506,10 @@ async function runFoldSummarization(job, topDoc) {
     const finalObj = parseLLMReply(llmReply, job);
     accumulatedSummary = finalObj;
 
-    // Update budget tracking if budget is set
-    if (budgetRemainingTokens != null) {
-      const numTokensInputActual = tokenCount(thisChunkDoc.getResolvedContent())
-      const numTokensActual = typeof finalObj === 'string'
-        ? tokenCount(finalObj.trim())
-        : tokenCount(JSON.stringify(finalObj).trim());
-      statArray.push({
-        numTokensInputActual,
-        numTokensTarget,
-        numWordsTarget,
-        numTokensActual,
-        wordsPerToken: wordsPerToken.ratio(),
-        numTokensTotalTarget: Number(job.tokens_budget),
-        numTokensBudgetRemaning: budgetRemainingTokens,
-        iChunk: i,
-        chunksRemaining
-      })
-      wordsPerToken.tally(numWordsTarget, numTokensActual)
-      budgetRemainingTokens = Math.max(0, budgetRemainingTokens - numTokensActual);
-      chunksRemaining--;
-    }
-
     job.chunks_completed++;
   }
 
   ensureAnnotations(topDoc._doc);
-  topDoc.setChunksForGroup(job.chunk_group+"_stats", statArray)
   topDoc._doc.annotations[job.annotation_field] = accumulatedSummary;
 }
 
@@ -630,7 +600,7 @@ async function runDeltaFoldSummarization(job, topDoc) {
     const chunkText = `<chunk id="${thisChunkDoc._doc.id}">\n${thisChunkDoc.getResolvedContent()}\n</chunk>`;
 
     let userContent = `## Document ID: ${docId}\n`;
-    userContent += `## Accumulating summary array (so far):\n${stDeltaArray}\n\n`;
+    userContent += `## Accumulating summary array (so far):\n${JSON.stringify(deltaArray, null, 2)}\n\n`;
     if (precedingText) {
       userContent += `## Preceding chunk(s):\n${precedingText}\n\n---\n\n`;
     }

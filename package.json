@@ -8,6 +8,7 @@
     "test:all": "./node_modules/.bin/mocha  test/**/*.spec.mjs",
     "test:myfavorite": "node ./node_modules/mocha/bin/mocha  --grep \"list available models\"",
     "test:ci": "env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha --tags \"not:llm\" test/**/*.spec.mjs",
+    "lint": "eslint .",
     "postinstall": "mkdir -p test/data && touch test/data/05-versions-space.pdf  # pdf-parse workaround"
   },
   "keywords": [],
@@ -37,6 +38,7 @@
     "uuid": "^11.0.5"
   },
   "devDependencies": {
+    "eslint": "^9.39.1",
     "mocha": "^11.1.0",
     "mocha-tags-ultra": "^1.0.3"
   }
