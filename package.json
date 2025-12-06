@@ -26,6 +26,8 @@
     "mammoth": "^1.8.0",
     "mathjs": "^14.0.1",
     "multer": "^1.4.5-lts.1",
+    "node-pptx-parser": "^1.0.1",
+    "officeparser": "^5.2.1",
     "ollama": "^0.5.11",
     "openai": "^4.60.0",
     "pdf-parse": "^1.1.1",
