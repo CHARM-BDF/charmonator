@@ -188,7 +188,7 @@ POST /conversion/image
 POST /conversion/file
 ```
 
-- **Description**: Converts supported file types (e.g., `.docx`, `.pdf`, `.txt`) to plain Markdown in a single shot. May not produce chunk-level detail (unlike the more complex Charmonizer routes).
+- **Description**: Converts supported file types (e.g., `.docx`, `.pptx`, `.pdf`, `.txt`) to plain Markdown in a single shot. May not produce chunk-level detail (unlike the more complex Charmonizer routes).
 
 - **Content-Type**: `multipart/form-data`
 
