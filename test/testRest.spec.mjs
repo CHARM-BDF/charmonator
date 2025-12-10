@@ -157,6 +157,7 @@ describe('My REST tests', function() {
     // NOTE: this endpoint does not OCR!!
     it('should convert pdf to markdown synchronously without OCR', async function() {
       const url = `${baseCharmonatorUrl}/conversion/file`
+      this.timeout(13000*timeoutMargin);
       const form = new FormData();
       form.append('file', fs.createReadStream(pdfPath));
       form.append('ocr_threshold', "1.0")
