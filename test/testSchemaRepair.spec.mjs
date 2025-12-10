@@ -86,7 +86,7 @@ tags().describe('Test schema repair', function() {
     });
   })
   // Create one Mocha "it" test per instance-file
-  it(`should repair a nonconformant answer`, async function() {
+  tags('llm').it(`should repair a nonconformant answer`, async function() {
     this.timeout(msTimeout); 
     const pathLog = path.join(__dirname, path.basename(__filename)+".log")
     const fdLog = fs.openSync(pathLog, "w")
