@@ -782,6 +782,28 @@ function hideThinkingIndicator() {
 }
 
 /**
+ * A best effort JSON formatter.
+ */
+function tryPrettyPrintJSON(json) {
+  // TODO: try to render json without a markdown filter
+  try {
+    return ({
+      "messages": json.messages.map(msg => {
+          const role = msg['role']
+          let content = msg['content']
+          content = JSON.stringify(JSON.parse(content), null, 2)
+          // play with fire: seems totally bogus but works
+          content = "```\n" + content + "\n```"
+          return {role, content}
+      })
+    })
+  } catch(ex) {
+    console.error(ex)
+    return json
+  }
+}
+
+/**
  * Send message (user typed + attachments)
  */
 async function sendMessage() {
@@ -902,7 +924,10 @@ async function sendMessage() {
       data = { error: `Failed to parse response: ${parseError.message}` };
     }
     if (response.ok) {
-      const suffix = TranscriptFragment.fromJSON(data);
+      // If we asked to force JSON schema, then it's reasonable to expect that we
+      // got JSON back.
+      const dataFormatted = finalSchema ? tryPrettyPrintJSON(data) : data
+      const suffix = TranscriptFragment.fromJSON(dataFormatted);
       currentTranscript = currentTranscript.plus(suffix);
 
       // Display new assistant messages
