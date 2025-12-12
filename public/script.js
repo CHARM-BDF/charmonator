@@ -794,10 +794,14 @@ async function sendMessage() {
   // Build content array for the user message
   // We want to store both text + attachments
   const finalContent = [];
+  let finalSchema = null;
   if (typedText) {
     finalContent.push(typedText);
   }
   for (const att of pendingAttachments) {
+    if (att.fileName.endsWith(".schema.json")) {
+      finalSchema = att.content
+    }
     if (att.type === 'image') {
       // Convert to an ImageAttachment
       const imgAttachment = new ImageAttachment(att.content);
@@ -833,6 +837,17 @@ async function sendMessage() {
       temperature,
       transcript: currentTranscript.toJSON()
     };
+    if(finalSchema) {
+      const jsonSchemaParsed = JSON.parse(finalSchema)
+      payload.options = payload.opttions || {}
+      payload.options.response_format = {
+        'type': 'json_schema',
+        'json_schema': {
+          'name': 'forced-schema',
+          'schema': jsonSchemaParsed
+        }
+      }
+    }
 
     const response = await fetch(`${CHARMONATOR_API_URL}/transcript/extension`, {
       method: 'POST',
