@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import FormData from 'form-data';
 import fetch from 'node-fetch';
+import http from 'http';
 import { fileURLToPath } from 'url';
 import { useManagedServerFixture } from './support/managed-server-fixture.mjs';
 
@@ -161,7 +162,9 @@ describe('My REST tests', function() {
       const form = new FormData();
       form.append('file', fs.createReadStream(pdfPath));
       form.append('ocr_threshold', "1.0")
+      const agent = new http.Agent({ keepAlive: false })
       const r = await fetch(url, {
+        agent,
         method: 'POST',
         body: form
       });
