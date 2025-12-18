@@ -71,7 +71,7 @@ function loadSchemaInstancePairs(baseDir) {
 }
 
 const msTimeout = 600000 // TODO: iteration, timeoutMargin
-const dir_data = path.join(__dirname, 'data', 'schema_repair');
+const dir_data = path.join(__dirname, 'data', 'extra', 'schema_repair');
 
 tags().describe('Test schema repair', function() {
   let server;
