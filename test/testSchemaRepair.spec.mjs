@@ -116,7 +116,8 @@ tags().describe('Test schema repair', function() {
               schema: schemaData
             }
           }
-        }
+        },
+        num_schema_repair_max_attempts: 7
       };
 
       const resp = await fetch(url, {
