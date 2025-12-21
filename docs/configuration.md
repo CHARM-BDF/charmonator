@@ -18,9 +18,37 @@ Optionally, beside config.json, you may place a config.secret.json dedicated to 
 
 # Reference
 
-By default, the file is located relative to the source tree at ```conf/config.json```.
+The configuration file is searched in the following order (first found wins):
+1. Path specified by `CHARMONATOR_CONFIG` environment variable
+2. `~/.charmonator/config.json` (user home directory)
+3. `./conf/config.json` (relative to the project)
 
 Below is a complete reference of all recognized keys, along with what they control and the typical defaults/usage.
+
+## Model Aliases
+
+Model entries can be either full configuration objects or **string aliases** that point to another model key. This allows you to create shortcuts or versioned aliases:
+
+```json
+{
+  "models": {
+    "openai:gpt-4o": {
+      "api": "OpenAI",
+      "model_type": "chat",
+      "model": "gpt-4o",
+      "api_key": "sk-..."
+    },
+    "gpt-4o": "openai:gpt-4o",
+    "default": "gpt-4o"
+  }
+}
+```
+
+In this example:
+- `"gpt-4o"` is an alias for `"openai:gpt-4o"`
+- `"default"` is an alias for `"gpt-4o"`, which resolves to `"openai:gpt-4o"`
+
+Aliases are resolved recursively, and circular references are detected and will throw an error.
 
 ## Top-level keys
 
@@ -40,7 +68,7 @@ Below is a complete reference of all recognized keys, along with what they contr
   - Timeout events are noted in the stdout log.
   - If specified in a model, model value overrides the global value.
 
-- num_client_request_max_attempts
+- max_attempts
   - Number of times to attempt each downstream HTTP call.  Before any timeout, the first call counts as 1 attempt.
   - Defaults to 2.
   - If specified in a model, model value overrides the global value.
@@ -50,7 +78,10 @@ Below is a complete reference of all recognized keys, along with what they contr
   - Keys within server:
     - port
       - Number for which port to run Charmonator on.
-      - Defaults to 5002 if not set (though the code checks for 5003 in some places as well).
+      - Defaults to 5003 if not set.
+    - api_key
+      - Optional API key to protect the Charmonator server endpoints.
+      - Can also be stored in `config.secret.json` under `server.api_key`.
     - baseUrl
       - A path prefix for hosting the APIs under some subpath (e.g. "/charm").
       - Default: "" (empty string, meaning root-level).
@@ -96,7 +127,7 @@ Below is a complete reference of all recognized keys, along with what they contr
 
     - api  (REQUIRED)
       - Which backend to use; must be one of:
-        "OpenAI", "OpenAI_Azure", "Anthropic", "ollama", (planned: "Google", etc.)
+        "OpenAI", "OpenAI_Azure", "Anthropic", "Anthropic_Bedrock", "ollama", "Google"
 
     - model_type
       - The broad type of the model’s usage, typically "chat" or "text" or "embedding".
@@ -121,8 +152,8 @@ Below is a complete reference of all recognized keys, along with what they contr
       - An array of tool names (strings) that you have declared at config.tools.
       - The model will be able to make function calls referencing those tool names.
 
-    - num_client_request_max_attempts
-      - See top-level key num_client_request_max_attempts
+    - max_attempts
+      - See top-level key max_attempts.
 
     - ms_client_request_timeout
       - See top-level key ms_client_request_timeout.
@@ -132,9 +163,19 @@ Below is a complete reference of all recognized keys, along with what they contr
       - For instance, "context_size" might be used for OpenAI or local LLM, "max_tokens" for Anthropic, etc.
 
     - reasoning
-      - (Optional) Object used for advanced control in certain special flavored models. For instance,
+      - (Optional) Object used for OpenAI reasoning models (o1, o3, etc.). For instance:
+        ```json
         { "effort": "high" }
-        - This is mostly relevant if you’re using special “reasoning” model variants from some providers.
+        ```
+      - Valid effort values: "low", "medium", "high"
+
+    - reasoning_effort
+      - (Optional) Alternative to `reasoning.effort` for OpenAI reasoning models.
+      - Valid values: "low", "medium", "high"
+
+    - verbosity
+      - (Optional) Controls verbosity for GPT-5 models.
+      - Used when calling gpt-5 or gpt-5-mini.
 
     - Additional backend-specific fields:
 
@@ -147,11 +188,20 @@ Below is a complete reference of all recognized keys, along with what they contr
          - host: The host:port for your local Ollama service, e.g. "http://127.0.0.1:11434"
 
        - Anthropic-specific:
-         - model: e.g. "claude-2"
+         - model: e.g. "claude-3-5-sonnet-latest"
          - max_tokens: number of tokens to target, for instance 8192
 
-       - (Planned) Google-specific:
-         - no stable fields documented yet, but typically includes "model" (such as "gemini-2.0-xyz")
+       - Anthropic_Bedrock-specific:
+         - aws_region: AWS region (e.g., "us-east-1")
+         - aws_access_key: AWS access key ID
+         - aws_secret_key: AWS secret access key
+         - model: Bedrock model ID (e.g., "us.anthropic.claude-3-5-haiku-20241022-v1:0")
+
+       - Google-specific:
+         - model: the Gemini model name (e.g. "gemini-2.0-flash", "gemini-1.5-pro")
+         - api_key: your Google AI API key (or set GOOGLE_AI_API_KEY env var)
+         - system: system instruction for the model
+         - generationConfig: (optional) object with generation parameters
 
     - Example minimal usage for an OpenAI Chat model might be:
       {
@@ -231,11 +281,55 @@ Alternatively, you may store your configuration file at a location of your choic
 
 Here:
 - `api`: `"OpenAI"` signals use of standard OpenAI Chat endpoints.
-- `model`: an OpenAI model name like `"gpt-3.5-turbo"` or `"gpt-4"`.
+- `model`: an OpenAI model name like `"gpt-4o"` or `"gpt-4"`.
 - `api_key`: your secret key from your OpenAI account.
 - `model_type`: typically `"chat"`.
 - `system`: an optional system message used as context for the model.
 - `tools`: if you want to enable tools, supply an array of tool names from your config.
+
+#### OpenAI Reasoning Models (o1, o3, etc.)
+
+```jsonc
+{
+  "models": {
+    "my-o3-model": {
+      "api": "OpenAI",
+      "model_type": "chat",
+
+      "api_key": "OPENAI_API_KEY_HERE_OR_IN_SECRET_JSON",
+      "model": "o3",
+
+      "reasoning_effort": "high",  // "low", "medium", or "high"
+      "context_size": 128000,
+      "output_limit": 16384
+    }
+  }
+}
+```
+
+For reasoning models:
+- `reasoning_effort`: controls how much reasoning the model performs ("low", "medium", "high")
+- Alternatively, use `"reasoning": { "effort": "high" }`
+- Note: `temperature` and `stream` are not supported for reasoning models
+
+#### OpenAI GPT-5 Models
+
+```jsonc
+{
+  "models": {
+    "my-gpt5-model": {
+      "api": "OpenAI",
+      "model_type": "chat",
+
+      "api_key": "OPENAI_API_KEY_HERE_OR_IN_SECRET_JSON",
+      "model": "gpt-5",
+
+      "reasoning_effort": "medium",
+      "verbosity": "normal"  // optional verbosity control
+    }
+  }
+}
+```
 
 ---
 
@@ -283,7 +377,7 @@ Here:
       "model_type": "chat",
 
       "api_key": "ANTHROPIC_API_KEY_HERE_OR_IN_SECRET_JSON",
-      "model": "claude-2",   // or "claude-instant-1"
+      "model": "claude-3-5-sonnet-latest",   // or "claude-3-opus-latest"
 
       "temperature": 0.8,
       "max_tokens": 8192,
@@ -295,14 +389,105 @@ Here:
 ```
 
 Here:
-- `api`: `"Anthropic"` signals that we’re using the Anthropic client (Claude).
+- `api`: `"Anthropic"` signals that we're using the Anthropic client (Claude).
 - `api_key`: your Claude/Anthropic key.
-- `model`: e.g. `"claude-2"`, `"claude-instant-1"`, etc.
+- `model`: e.g. `"claude-3-5-sonnet-latest"`, `"claude-3-opus-latest"`, etc.
 - `max_tokens`: optional override for token usage.
 
 ---
 
-### 4) Example for **Ollama** 
+### 3b) Example for **Anthropic via AWS Bedrock**
+
+You can also access Anthropic Claude models through AWS Bedrock by using `"api": "Anthropic_Bedrock"`. This uses AWS credentials instead of an Anthropic API key:
+
+```jsonc
+{
+  "models": {
+    "my-bedrock-claude": {
+      "api": "Anthropic_Bedrock",
+      "model_type": "chat",
+
+      // AWS credentials
+      "aws_region": "us-east-1",
+      "aws_access_key": "YOUR_AWS_ACCESS_KEY",
+      "aws_secret_key": "YOUR_AWS_SECRET_KEY",
+
+      // Bedrock model ID - use inference profile ID for newer models
+      "model": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+
+      "temperature": 0.8,
+      "max_tokens": 8192,
+      "context_size": 200000,
+
+      "system": "You are a helpful assistant running on AWS Bedrock."
+    }
+  }
+}
+```
+
+Here:
+- `api`: `"Anthropic_Bedrock"` signals use of the Anthropic Bedrock SDK.
+- `aws_region`: the AWS region where Bedrock is available (e.g., `"us-east-1"`).
+- `aws_access_key`: your AWS access key ID.
+- `aws_secret_key`: your AWS secret access key.
+- `model`: the Bedrock model ID (see below for format details).
+
+#### Bedrock Model IDs vs. Inference Profiles
+
+Bedrock has two types of model identifiers:
+
+1. **Direct model IDs** (older models): `anthropic.claude-3-haiku-20240307-v1:0`
+2. **Inference profile IDs** (newer models): `us.anthropic.claude-haiku-4-5-20251001-v1:0`
+
+**Important:** Newer models like Claude Haiku 4.5 **require** inference profile IDs (with the `us.` or `global.` prefix). Using the direct model ID will result in an error.
+
+Common model IDs for Bedrock:
+
+| Model | Inference Profile ID |
+|-------|---------------------|
+| Claude 3.5 Haiku | `us.anthropic.claude-3-5-haiku-20241022-v1:0` |
+| Claude 3.5 Sonnet | `us.anthropic.claude-3-5-sonnet-20241022-v2:0` |
+| Claude 3 Opus | `us.anthropic.claude-3-opus-20240229-v1:0` |
+| Claude 3 Haiku | `us.anthropic.claude-3-haiku-20240307-v1:0` |
+| Claude Haiku 4.5 | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
+
+To list available inference profiles in your region, use:
+```bash
+aws bedrock list-inference-profiles --region us-east-1 --output table
+```
+
+#### AWS IAM Permissions
+
+The AWS IAM user must have the following permissions:
+
+1. **`bedrock:InvokeModel`** - Required for all model invocations
+2. **`bedrock:InvokeModelWithResponseStream`** - Required for streaming (automatically used)
+
+You can attach the `AmazonBedrockFullAccess` managed policy, or create a custom policy:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": "arn:aws:bedrock:*::foundation-model/*"
+    }
+  ]
+}
+```
+
+#### Streaming
+
+Charmonator automatically uses streaming for all Bedrock requests. This is required for newer models like Claude Haiku 4.5, which do not support non-streaming invocation.
+
+---
+
+### 4) Example for **Ollama**
 
 ```jsonc
 {
@@ -315,7 +500,7 @@ Here:
       // Some local Ollama distributions may not require a key.
 
       "host": "http://127.0.0.1:11434",
-      "model": "llama2-7b-uncensored", 
+      "model": "llama3.2",
 
       "temperature": 0.6,
 
@@ -335,6 +520,40 @@ Here:
 
 ---
 
+### 5) Example for **Google** (Gemini)
+
+```jsonc
+{
+  "models": {
+    "my-gemini-model": {
+      "api": "Google",
+      "model_type": "chat",
+
+      "api_key": "GOOGLE_AI_API_KEY_HERE_OR_IN_SECRET_JSON",
+      "model": "gemini-2.0-flash",  // or "gemini-1.5-pro"
+
+      // Optional: system instruction
+      "system": "You are a helpful assistant powered by Google Gemini.",
+
+      // Optional: generation config
+      "generationConfig": {
+        "temperature": 0.7,
+        "maxOutputTokens": 8192
+      }
+    }
+  }
+}
+```
+
+Here:
+- `api`: `"Google"` signals use of the Google Generative AI SDK.
+- `model`: a Gemini model name like `"gemini-2.0-flash"` or `"gemini-1.5-pro"`.
+- `api_key`: your Google AI API key (can also be set via `GOOGLE_AI_API_KEY` environment variable).
+- `system`: an optional system instruction.
+- `generationConfig`: optional object with parameters like `temperature`, `maxOutputTokens`, etc.
+
+---
+
 ### Additional `config.json` Structure
 
 When building a complete `config.json`, you may also include:
@@ -346,7 +565,7 @@ When building a complete `config.json`, you may also include:
     "default_temperature": 0.8,
     
     "server": {
-      "port": 5002,
+      "port": 5003,
       "baseUrl": "/ai2",
       "charmonator": {
         "apiPath": "api/charmonator",

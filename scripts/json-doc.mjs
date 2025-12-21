@@ -17,8 +17,9 @@ Commands:
         - For top-level content, metadata is printed at the top.
         - If reassembling from a content_chunk_group, metadata is printed per chunk.
 
-  extract-summary              <path/to/document.json>
-      Reads the JSON file and prints doc.annotations.summary if present.
+  extract-summary              <path/to/document.json> [--field <name>] [--separator <sep>]
+      Reads the JSON file and prints doc.annotations.summary (or specified field) if present.
+      For delta-fold summaries (arrays), joins elements with separator (default: "\n\n--\n\n").
 
   merge-chunks-by-count <maxTokens> [<encoding>] <path/to/document.json>
       Merges the "pages" chunk group into larger chunks, each up to maxTokens tokens.
@@ -85,6 +86,50 @@ function parseExtractMarkdownArgs(args) {
   return { filePath, metadataFlag };
 }
 
+/**
+ * Parses arguments for "extract-summary" and returns an object:
+ *   {
+ *     filePath: string,
+ *     field: string (default: 'summary'),
+ *     separator: string (default: '\n\n--\n\n')
+ *   }
+ */
+function parseExtractSummaryArgs(args) {
+  let filePath = null;
+  let field = 'summary';
+  let separator = '\n\n--\n\n';
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--field') {
+      if (i + 1 < args.length) {
+        field = args[++i];
+      } else {
+        console.error('[ERROR] Missing value for --field');
+        process.exit(1);
+      }
+    } else if (arg === '--separator') {
+      if (i + 1 < args.length) {
+        // Handle escape sequences in the separator
+        separator = args[++i].replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+      } else {
+        console.error('[ERROR] Missing value for --separator');
+        process.exit(1);
+      }
+    } else if (arg.startsWith('--')) {
+      console.error(`[ERROR] Unknown option: ${arg}`);
+      process.exit(1);
+    } else {
+      if (filePath !== null) {
+        console.error('[ERROR] Too many positional arguments for extract-summary.');
+        showUsageAndExit();
+      }
+      filePath = arg;
+    }
+  }
+  return { filePath, field, separator };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   if (args.length < 1) {
@@ -104,12 +149,14 @@ async function main() {
       break;
     }
 
-    case 'extract-summary':
-      if (rest.length < 1) {
+    case 'extract-summary': {
+      const extractSummaryOpts = parseExtractSummaryArgs(rest);
+      if (!extractSummaryOpts.filePath) {
         showUsageAndExit();
       }
-      await doExtractSummary(rest[0]);
+      await doExtractSummary(extractSummaryOpts.filePath, extractSummaryOpts);
       break;
+    }
 
     case 'merge-chunks-by-count':
       // Expect: merge-chunks-by-count <maxTokens> [<encoding>] <path/to/document.json>
@@ -211,17 +258,67 @@ async function doExtractMarkdown(jsonFile, { metadataFlag = false } = {}) {
 }
 
 /**
- * Loads the doc from disk, then prints doc.annotations.summary if present.
+ * Loads the doc from disk, then prints doc.annotations[field] if present.
+ * For delta-fold summaries (arrays), joins elements with the specified separator.
+ * Handles delta-fold format where elements may be JSON strings like '{"delta":"text"}'.
  */
-async function doExtractSummary(jsonFile) {
+async function doExtractSummary(jsonFile, { field = 'summary', separator = '\n\n--\n\n' } = {}) {
   const docObj = loadJsonDoc(jsonFile);
 
-  // If there's no 'annotations' or 'summary', we just note that.
-  if (docObj.annotations && docObj.annotations.summary) {
-    console.log(docObj.annotations.summary);
-  } else {
-    console.log('(No summary found in doc.annotations.summary)');
+  // If there's no 'annotations' or the specified field, we just note that.
+  if (!docObj.annotations || docObj.annotations[field] === undefined) {
+    console.log(`(No summary found in doc.annotations.${field})`);
+    return;
   }
+
+  const summary = docObj.annotations[field];
+
+  if (Array.isArray(summary)) {
+    // Delta-fold summaries are arrays - extract text and join with separator
+    const extractedDeltas = summary.map(extractDeltaText).filter(text => text && text.trim());
+    console.log(extractedDeltas.join(separator));
+  } else if (typeof summary === 'object') {
+    // If it's an object with delta key, extract it
+    if (summary.delta !== undefined) {
+      console.log(summary.delta);
+    } else {
+      // Otherwise pretty-print as JSON
+      console.log(JSON.stringify(summary, null, 2));
+    }
+  } else {
+    // String or other primitive - try to parse as JSON delta, else print directly
+    const extracted = extractDeltaText(summary);
+    console.log(extracted);
+  }
+}
+
+/**
+ * Helper to extract text from various delta-fold formats:
+ * - String containing JSON: '{"delta":"text"}' -> 'text'
+ * - Object with delta: {delta: 'text'} -> 'text'
+ * - Plain string: 'text' -> 'text'
+ */
+function extractDeltaText(item) {
+  if (typeof item === 'string') {
+    // Try to parse as JSON
+    try {
+      const parsed = JSON.parse(item);
+      if (parsed && typeof parsed.delta === 'string') {
+        return parsed.delta;
+      }
+      // If parsed but no delta key, stringify back
+      return typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+    } catch (e) {
+      // Not JSON, return as-is
+      return item;
+    }
+  } else if (item && typeof item === 'object') {
+    if (typeof item.delta === 'string') {
+      return item.delta;
+    }
+    return JSON.stringify(item);
+  }
+  return String(item);
 }
 
 /**

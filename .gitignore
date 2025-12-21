@@ -2,3 +2,4 @@ node_modules/**
 uploads/**
 conf/config.json
 *~
+defunct/

@@ -239,9 +239,278 @@ POST /embedding
 
 ---
 
+### 6. Document Operations
+
+These endpoints provide synchronous operations on JSON Document Objects (wrapping, combining, extracting content, and chunk manipulation).
+
+#### 6a. Wrap Content into Document
+
+```
+POST /documents
+```
+
+- **Description**: Wraps raw content into a valid document object with a generated ID.
+
+- **Request Body**:
+  ```json
+  {
+    "content": "Raw text content to wrap into a document..."
+  }
+  ```
+  - **`content`** (string or object, required): The content to wrap. If an object, it will be JSON-stringified.
+
+- **Response**:
+  ```json
+  {
+    "document": {
+      "id": "sha256hash...",
+      "content": "Raw text content to wrap into a document..."
+    }
+  }
+  ```
+  - **`id`**: SHA-256 hash of the content string.
+
+- **Errors**:
+  - 400 if `content` is missing.
+  - 500 on unexpected errors.
+
+---
+
+#### 6b. Combine Documents
+
+```
+POST /documents/combine
+```
+
+- **Description**: Combines multiple documents into a single master document with a chunk group containing the source documents.
+
+- **Request Body**:
+  ```json
+  {
+    "documents": [
+      { "id": "doc1", "content": "..." },
+      { "id": "doc2", "content": "..." }
+    ],
+    "master_id": null,
+    "group_name": "sources"
+  }
+  ```
+  - **`documents`** (array, required): Array of document objects to combine.
+  - **`master_id`** (string, optional): ID for the master document. Auto-generated if null.
+  - **`group_name`** (string, optional): Name for the chunk group containing sources. Defaults to `"sources"`.
+
+- **Response**:
+  ```json
+  {
+    "document": {
+      "id": "master-doc-id",
+      "content_chunk_group": "sources",
+      "chunks": {
+        "sources": [ /* array of source documents */ ]
+      }
+    }
+  }
+  ```
+
+- **Errors**:
+  - 400 if `documents` is missing, not an array, or empty.
+  - 500 on unexpected errors.
+
+---
+
+#### 6c. Extract Markdown from Document
+
+```
+POST /documents/markdown
+```
+
+- **Description**: Extracts markdown/text content from a document. If the document has a `content_chunk_group`, content is reassembled from chunks.
+
+- **Request Body**:
+  ```json
+  {
+    "document": { /* doc.json object */ },
+    "include_metadata": false
+  }
+  ```
+  - **`document`** (object, required): The document object to extract from.
+  - **`include_metadata`** (boolean, optional): If `true`, prepends metadata as HTML comments. Defaults to `false`.
+
+- **Response**:
+  ```json
+  {
+    "markdown": "# Extracted content...\n\n..."
+  }
+  ```
+
+- **Response with `include_metadata: true`**:
+  ```
+  <!-- title: My Document -->
+  <!-- author: John Doe -->
+  # Extracted content...
+  ```
+
+- **Errors**:
+  - 400 if `document` is missing.
+  - 500 on unexpected errors.
+
+---
+
+#### 6d. Extract Summary from Document
+
+```
+POST /documents/summary
+```
+
+- **Description**: Extracts a summary annotation from a document. Handles delta-fold format (arrays of `{"delta": "..."}` strings) by extracting and joining the delta values.
+
+- **Request Body**:
+  ```json
+  {
+    "document": { /* doc.json object */ },
+    "field": "summary",
+    "separator": "\n\n--\n\n"
+  }
+  ```
+  - **`document`** (object, required): The document object.
+  - **`field`** (string, optional): The annotation field to extract. Defaults to `"summary"`.
+  - **`separator`** (string, optional): Separator for joining delta-fold arrays. Defaults to `"\n\n--\n\n"`.
+
+- **Response** (simple string summary):
+  ```json
+  {
+    "summary": "The extracted summary text..."
+  }
+  ```
+
+- **Response** (delta-fold array summary):
+  ```json
+  {
+    "summary": "First delta content...\n\n--\n\nSecond delta content...\n\n--\n\nThird delta content..."
+  }
+  ```
+
+- **Response** (no summary found):
+  ```json
+  {
+    "summary": null,
+    "message": "No summary found in annotations"
+  }
+  ```
+
+- **Errors**:
+  - 400 if `document` is missing.
+  - 500 on unexpected errors.
+
+---
+
+#### 6e. Merge Chunks by Token Count
+
+```
+POST /documents/chunks/merge
+```
+
+- **Description**: Merges small chunks into larger ones up to a maximum token count. Creates a new chunk group with the merged results.
+
+- **Request Body**:
+  ```json
+  {
+    "document": { /* doc.json object */ },
+    "max_tokens": 2048,
+    "encoding": "cl100k_base",
+    "chunk_group": "pages",
+    "new_group_name": null,
+    "overlap_tokens": 0
+  }
+  ```
+  - **`document`** (object, required): The document object with chunks to merge.
+  - **`max_tokens`** (number, required): Maximum tokens per merged chunk.
+  - **`encoding`** (string, optional): Tiktoken encoding name. Defaults to `"cl100k_base"`.
+  - **`chunk_group`** (string, optional): Source chunk group to merge. Defaults to `"pages"`.
+  - **`new_group_name`** (string, optional): Name for the new chunk group. Auto-generated if null (e.g., `"pages:merged(2048,cl100k_base)"`).
+  - **`overlap_tokens`** (number, optional): Number of tokens to overlap between chunks. Defaults to `0`.
+
+- **Response**:
+  ```json
+  {
+    "document": { /* modified doc.json with new chunk group */ },
+    "old_chunk_count": 100,
+    "new_chunk_count": 15,
+    "new_group_name": "pages:merged(2048,cl100k_base)"
+  }
+  ```
+
+- **Errors**:
+  - 400 if `document` is missing or `max_tokens` is invalid.
+  - 500 on unexpected errors.
+
+---
+
+#### 6f. Extract Chunk Annotations
+
+```
+POST /documents/chunks/annotations
+```
+
+- **Description**: Extracts annotations from each chunk in a specified chunk group. Useful for retrieving per-chunk summaries or other annotations.
+
+- **Request Body**:
+  ```json
+  {
+    "document": { /* doc.json object */ },
+    "chunk_group": "pages",
+    "target": "summary",
+    "include_metadata": false
+  }
+  ```
+  - **`document`** (object, required): The document object.
+  - **`chunk_group`** (string, required): The chunk group to extract annotations from.
+  - **`target`** (string, optional): The annotation field to extract from each chunk. Defaults to `"summary"`.
+  - **`include_metadata`** (boolean, optional): If `true`, includes chunk metadata in the response. Defaults to `false`.
+
+- **Response**:
+  ```json
+  {
+    "annotations": [
+      {
+        "annotation": "Summary for chunk 1..."
+      },
+      {
+        "annotation": "Summary for chunk 2..."
+      },
+      {
+        "annotation": null
+      }
+    ]
+  }
+  ```
+
+- **Response with `include_metadata: true`**:
+  ```json
+  {
+    "annotations": [
+      {
+        "metadata": { "page_number": 1 },
+        "annotation": "Summary for chunk 1..."
+      },
+      {
+        "metadata": { "page_number": 2 },
+        "annotation": "Summary for chunk 2..."
+      }
+    ]
+  }
+  ```
+
+- **Errors**:
+  - 400 if `document` or `chunk_group` is missing.
+  - 400 if the specified `chunk_group` does not exist in the document.
+  - 500 on unexpected errors.
+
+---
+
 ## Charmonizer Endpoints
 
-### 6. Convert Document (Long-Running with Page Tracking)
+### 7. Convert Document (Long-Running with Page Tracking)
 
 ```
 POST /conversions/documents
@@ -370,7 +639,7 @@ DELETE /conversions/documents/{jobId}
 
 ---
 
-### 7. Summarize a Document (Long-Running)
+### 8. Summarize a Document (Long-Running)
 
 ```
 POST /summaries
@@ -379,17 +648,21 @@ POST /summaries
 - **Description**: Summarizes a [Document Object](#document-object-specification) in either a single pass or chunk-by-chunk. Returns a `job_id` to poll.
 
 - **Methods**: **`"full"`, `"map"`, `"fold"`, `"delta-fold"`, `"map-merge"`, or `"merge"`**.
-  - `"full"` = single pass on the entire doc  
+  - `"full"` = single pass on the entire doc
   - `"map"` = summarize each chunk individually (optionally with some context from before/after each chunk) *(supports budget constraints)*
-  - `"fold"` = iterative accumulation  
+  - `"fold"` = iterative accumulation *(supports budget constraints)*
   - `"delta-fold"` = iterative partial accumulation
-  - `"map-merge"` = first summarize each chunk individually, then iteratively merge those chunk-level summaries  
+  - `"map-merge"` = first summarize each chunk individually, then iteratively merge those chunk-level summaries
   - **`"merge"`** = merges **pre-existing** chunk-level summaries into a single top-level summary; assumes each chunk already has a summary in `annotations[annotation_field]`.
 
-- **Budgeted Summarization** *(map only)*:
-  - When `tokens_budget` is specified, the system dynamically modulates a length control prompt as each consecutive chunk is processed.
-  - Typical margin of error is plus or minus one chunk.
-  - Actual margin of error is prompt-dependent, and must be assessed and guarded by caller if needed.
+- **Budgeted Summarization** *(map and fold methods)*:
+  - When `tokens_budget` is specified, the system dynamically allocates a per-chunk token budget.
+  - For each chunk, the remaining budget is divided by remaining chunks: `floor(remaining_tokens / remaining_chunks)`.
+  - The system converts token limits to word limits (models follow word limits better) and adds explicit constraints to prompts.
+  - A `SmoothedRatioEstimator` learns the actual words-to-tokens ratio online, improving estimates as chunks are processed.
+  - Budget statistics are stored in `{chunk_group}_stats` for observability.
+  - Typical margin of error is plus or minus one chunk worth of tokens.
+  - Actual margin of error is prompt-dependent and must be assessed and guarded by caller if needed.
 
 - **`merge_mode`** (string, optional) – **applies to `"merge"` and `"map-merge"`**:
   - `"left-to-right"` (default) – merges summaries in a simple linear pass  
@@ -437,7 +710,7 @@ POST /summaries
   // For "map-merge" or "merge" only
   "merge_summaries_guidance": "Explain how to combine partial summaries, preserving all points.",
 
-  // Budget constraints (currently supported for "delta-fold" method only)
+  // Budget constraints (supported for "map" and "fold" methods)
   "tokens_budget": 1000                  // optional, maximum tokens allowed for final summary
 }
 ```
@@ -471,7 +744,7 @@ POST /summaries
 - **`annotation_field`**: The doc-level or chunk-level annotations key where the summary is stored (default: `"summary"`).  
 - **`annotation_field_delta`**: For `"delta-fold"`, the chunk-level key for each partial "delta" (default: `"summary_delta"`).
 - **`merge_summaries_guidance`**: (string) used by `"map-merge"` or `"merge"`, providing instructions on how to combine partial summaries.
-- **`tokens_budget`**: (number, optional) Maximum tokens allowed for the final summary. Currently supported for `"map"` method only.
+- **`tokens_budget`**: (number, optional) Maximum tokens allowed for the final summary. Supported for `"map"` and `"fold"` methods.
 
 #### Immediate Response
 
@@ -532,7 +805,7 @@ GET /summaries/{job_id}/result
 
 ---
 
-### 8. Compute Embeddings for a Document (Long-Running)
+### 9. Compute Embeddings for a Document (Long-Running)
 
 ```
 POST /embeddings
@@ -616,7 +889,7 @@ DELETE /embeddings/{jobId}
 
 ---
 
-### 9. Document Chunkings (Long-Running)
+### 10. Document Chunkings (Long-Running)
 
 ```
 POST /chunkings
