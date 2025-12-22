@@ -1,0 +1,72 @@
+{
+  "$comment": "Example configuration with MCP server tools",
+
+  "toolboxes": {
+    "builtins": {
+      "code": "./tools/builtins.mjs"
+    }
+  },
+
+  "tools": {
+    "server": {
+      "calculator": {
+        "from": "builtins",
+        "export": "CalculatorTool",
+        "options": {}
+      }
+    },
+    "client": {
+      "open_file": {
+        "from": "client_tools",
+        "export": "OpenFileTool"
+      }
+    }
+  },
+
+  "mcp": {
+    "servers": {
+      "test": {
+        "command": "node",
+        "args": ["./mcp-servers/test-server.mjs"],
+        "env": {}
+      }
+    },
+    "tools": {
+      "echo": {
+        "server": "test",
+        "tool": "echo"
+      },
+      "calc": {
+        "server": "test",
+        "tool": "calculator"
+      }
+    }
+  },
+
+  "models": {
+    "gpt-4o": {
+      "api": "OpenAI",
+      "model_type": "chat",
+      "model": "gpt-4o",
+      "tools": {
+        "server": ["calculator"],
+        "client": ["open_file"],
+        "mcp": ["echo", "calc"]
+      }
+    },
+    "claude-default": {
+      "api": "Anthropic",
+      "model_type": "chat",
+      "model": "claude-sonnet-4-20250514",
+      "tools": {
+        "server": [],
+        "client": [],
+        "mcp": ["echo", "calc"]
+      }
+    }
+  },
+
+  "server": {
+    "port": 7779
+  }
+}
