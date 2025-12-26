@@ -170,6 +170,28 @@ Aliases are resolved recursively, and circular references are detected and will 
       - (Optional) Fields used by various model providers to specify maximum context length or maximum tokens in the response.
       - For instance, "context_size" might be used for OpenAI or local LLM, "max_tokens" for Anthropic, etc.
 
+    - dimensions
+      - (Optional) For embedding models only. Specifies the output vector dimensionality.
+      - Used for storage planning (vector DB index sizing) and compatibility validation.
+      - OpenAI text-embedding-3 models support configurable dimensions via API.
+
+    - tokenizer
+      - (Optional) Explicit tokenizer encoding to use for this model when counting tokens via the `/tokens` endpoint.
+      - Supported values: `"cl100k_base"`, `"o200k_base"`
+      - If not specified, the tokenizer is inferred from the model name and provider.
+      - Default inference:
+        - OpenAI/Azure: `o200k_base` for GPT-4o, GPT-5, o1, o3; `cl100k_base` for GPT-4, GPT-3.5
+        - Anthropic: `cl100k_base` (approximation)
+        - Google: `cl100k_base` (approximation)
+        - ollama: `cl100k_base`
+
+    - tokenizer_mode
+      - (Optional) How to count tokens for this model: locally or via provider API.
+      - Valid values: `"local"`, `"api"`
+      - Default: `"local"`
+      - `"local"`: Uses tiktoken library for fast, offline token counting.
+      - `"api"`: Calls the provider's token counting API for accurate counts. Supported for Anthropic and Google models. Falls back to local if API is unavailable.
+
     - reasoning
       - (Optional) Object used for OpenAI reasoning models (o1, o3, etc.). For instance:
         ```json
@@ -528,7 +550,51 @@ Here:
 
 ---
 
-### 5) Example for **Google** (Gemini)
+### 5) Example for **Embedding Models**
+
+Embedding models convert text into vector representations for semantic search and similarity calculations.
+
+```jsonc
+{
+  "models": {
+    "openai:text-embedding-3-small": {
+      "api": "OpenAI",
+      "model_type": "embedding",
+      "model": "text-embedding-3-small",
+      "api_key": "OPENAI_API_KEY_HERE_OR_IN_SECRET_JSON",
+      "context_size": 8191,    // max input tokens
+      "dimensions": 1536       // output vector size
+    },
+
+    "openai:text-embedding-3-large": {
+      "api": "OpenAI",
+      "model_type": "embedding",
+      "model": "text-embedding-3-large",
+      "api_key": "OPENAI_API_KEY_HERE_OR_IN_SECRET_JSON",
+      "context_size": 8191,
+      "dimensions": 3072
+    },
+
+    "ollama:qwen3-embedding": {
+      "api": "ollama",
+      "model_type": "embedding",
+      "model": "qwen3-embedding",
+      "host": "http://localhost:11434",
+      "context_size": 8192,
+      "dimensions": 1024
+    }
+  }
+}
+```
+
+Here:
+- `model_type`: must be `"embedding"` for embedding models.
+- `context_size`: maximum input tokens the model accepts per request.
+- `dimensions`: output vector dimensionality (important for vector DB index sizing).
+
+---
+
+### 6) Example for **Google** (Gemini)
 
 ```jsonc
 {
