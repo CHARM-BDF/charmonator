@@ -239,11 +239,117 @@ POST /embedding
 
 ---
 
-### 6. Document Operations
+### 6. Token Counting
+
+#### 6a. Tokenize Text
+
+```
+POST /tokens
+```
+
+- **Description**: Tokenizes text and returns the individual token strings.
+
+- **Request Body**:
+  ```jsonc
+  {
+    "text": "Hello, world!",           // Required: the text to tokenize
+    "tokenizer": "cl100k_base",         // Optional: explicit tokenizer encoding
+    "model": "openai:gpt-4o"            // Optional: look up tokenizer from model config
+  }
+  ```
+  - **`text`** (string, required): The text to tokenize.
+  - **`tokenizer`** (string, optional): Explicit tokenizer encoding name. Supported: `"cl100k_base"`, `"o200k_base"`.
+  - **`model`** (string, optional): Model name to look up tokenizer from config.
+
+  **Note**: `tokenizer` and `model` are mutually exclusive. If neither is provided, defaults to `cl100k_base`.
+
+- **Response**:
+  ```json
+  {
+    "tokens": ["Hello", ",", " world", "!"],
+    "count": 4,
+    "encoding": "cl100k_base",
+    "mode": "local"
+  }
+  ```
+  - **`tokens`**: Array of token strings.
+  - **`count`**: Number of tokens.
+  - **`encoding`**: The tokenizer encoding used.
+  - **`mode`**: Either `"local"` (tiktoken) or `"api"` (provider API).
+
+- **Errors**:
+  - 400 if `text` is missing or not a string.
+  - 400 if both `tokenizer` and `model` are provided.
+  - 400 if `tokenizer` is not a supported encoding.
+  - 500 on unexpected server errors.
+
+---
+
+#### 6b. Count Tokens
+
+```
+POST /tokens/count
+```
+
+- **Description**: Counts tokens in text without returning individual tokens. Supports both local (tiktoken) and API-based counting.
+
+- **Request Body**:
+  ```jsonc
+  {
+    "text": "Hello, world!",           // Required: the text to count tokens in
+    "tokenizer": "o200k_base",          // Optional: explicit tokenizer encoding
+    "model": "anthropic:claude-sonnet"  // Optional: look up tokenizer from model config
+  }
+  ```
+  - **`text`** (string, required): The text to count tokens in.
+  - **`tokenizer`** (string, optional): Explicit tokenizer encoding name.
+  - **`model`** (string, optional): Model name to look up tokenizer from config.
+
+- **Response** (local mode):
+  ```json
+  {
+    "count": 4,
+    "encoding": "cl100k_base",
+    "mode": "local"
+  }
+  ```
+
+- **Response** (API mode, when model has `tokenizer_mode: "api"`):
+  ```json
+  {
+    "count": 4,
+    "encoding": null,
+    "mode": "api"
+  }
+  ```
+
+- **Supported Tokenizers**:
+  | Encoding | Models |
+  |----------|--------|
+  | `cl100k_base` | GPT-4, GPT-3.5, text-embedding-3-*, Claude (approximation) |
+  | `o200k_base` | GPT-4o, GPT-5, o1, o3 |
+
+- **Provider Defaults**:
+  | Provider | Default Tokenizer |
+  |----------|-------------------|
+  | OpenAI, OpenAI_Azure | `o200k_base` |
+  | Anthropic, Anthropic_Bedrock | `cl100k_base` |
+  | Google | `cl100k_base` |
+  | ollama | `cl100k_base` |
+
+- **Errors**:
+  - 400 if `text` is missing or not a string.
+  - 400 if both `tokenizer` and `model` are provided.
+  - 400 if `tokenizer` is not a supported encoding.
+  - 500 on unexpected server errors.
+
+---
+
+### 7. Document Operations
 
 These endpoints provide synchronous operations on JSON Document Objects (wrapping, combining, extracting content, and chunk manipulation).
 
-#### 6a. Wrap Content into Document
+#### 7a. Wrap Content into Document
 
 ```
 POST /documents
@@ -276,7 +382,7 @@ POST /documents
 
 ---
 
-#### 6b. Combine Documents
+#### 7b. Combine Documents
 
 ```
 POST /documents/combine
@@ -318,7 +424,7 @@ POST /documents/combine
 
 ---
 
-#### 6c. Extract Markdown from Document
+#### 7c. Extract Markdown from Document
 
 ```
 POST /documents/markdown
@@ -356,7 +462,7 @@ POST /documents/markdown
 
 ---
 
-#### 6d. Extract Summary from Document
+#### 7d. Extract Summary from Document
 
 ```
 POST /documents/summary
@@ -404,7 +510,7 @@ POST /documents/summary
 
 ---
 
-#### 6e. Merge Chunks by Token Count
+#### 7e. Merge Chunks by Token Count
 
 ```
 POST /documents/chunks/merge
@@ -446,7 +552,7 @@ POST /documents/chunks/merge
 
 ---
 
-#### 6f. Extract Chunk Annotations
+#### 7f. Extract Chunk Annotations
 
 ```
 POST /documents/chunks/annotations
@@ -510,7 +616,7 @@ POST /documents/chunks/annotations
 
 ## Charmonizer Endpoints
 
-### 7. Convert Document (Long-Running with Page Tracking)
+### 8. Convert Document (Long-Running with Page Tracking)
 
 ```
 POST /conversions/documents
@@ -639,7 +745,7 @@ DELETE /conversions/documents/{jobId}
 
 ---
 
-### 8. Summarize a Document (Long-Running)
+### 9. Summarize a Document (Long-Running)
 
 ```
 POST /summaries
@@ -805,7 +911,7 @@ GET /summaries/{job_id}/result
 
 ---
 
-### 9. Compute Embeddings for a Document (Long-Running)
+### 10. Compute Embeddings for a Document (Long-Running)
 
 ```
 POST /embeddings
@@ -889,7 +995,7 @@ DELETE /embeddings/{jobId}
 
 ---
 
-### 10. Document Chunkings (Long-Running)
+### 11. Document Chunkings (Long-Running)
 
 ```
 POST /chunkings
