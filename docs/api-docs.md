@@ -28,7 +28,7 @@ This document describes the **RESTful endpoints** exposed by **Charmonator** and
 ### 1. List Available Models
 
 ```
-GET /models
+GET api/charmonator/v1/models
 ```
 
 - **Description**: Lists all configured AI models for the server.
@@ -59,7 +59,7 @@ GET /models
 ### 2. Transcript Extension
 
 ```
-POST /transcript/extension
+POST api/charmonator/v1/transcript/extension
 ```
 
 - **Description**: Extends an existing conversation transcript using a specified model. This endpoint returns new messages in the conversation (usually from the assistant, possibly with tool calls/responses).  
@@ -130,7 +130,7 @@ POST /transcript/extension
 ### 3. Convert Image to Markdown
 
 ```
-POST /conversion/image
+POST api/charmonator/v1/conversion/image
 ```
 
 - **Description**:  
@@ -185,7 +185,7 @@ POST /conversion/image
 ### 4. Convert File to Markdown
 
 ```
-POST /conversion/file
+POST api/charmonator/v1/conversion/file
 ```
 
 - **Description**: Converts supported file types (e.g., `.docx`, `.pptx`, `.pdf`, `.txt`) to plain Markdown in a single shot. May not produce chunk-level detail (unlike the more complex Charmonizer routes).
@@ -211,7 +211,7 @@ POST /conversion/file
 ### 5. Generate Embedding
 
 ```
-POST /embedding
+POST api/charmonator/v1/embedding
 ```
 
 - **Description**: Creates an embedding vector for the given text.
@@ -244,7 +244,7 @@ POST /embedding
 #### 6a. Tokenize Text
 
 ```
-POST /tokens
+POST api/charmonator/v1/tokens
 ```
 
 - **Description**: Tokenizes text and returns the individual token strings.
@@ -288,7 +288,7 @@ POST /tokens
 #### 6b. Count Tokens
 
 ```
-POST /tokens/count
+POST api/charmonator/v1/tokens/count
 ```
 
 - **Description**: Counts tokens in text without returning individual tokens. Supports both local (tiktoken) and API-based counting.
@@ -352,7 +352,7 @@ These endpoints provide synchronous operations on JSON Document Objects (wrappin
 #### 7a. Wrap Content into Document
 
 ```
-POST /documents
+POST api/charmonator/v1/documents
 ```
 
 - **Description**: Wraps raw content into a valid document object with a generated ID.
@@ -385,7 +385,7 @@ POST /documents
 #### 7b. Combine Documents
 
 ```
-POST /documents/combine
+POST api/charmonator/v1/documents/combine
 ```
 
 - **Description**: Combines multiple documents into a single master document with a chunk group containing the source documents.
@@ -427,7 +427,7 @@ POST /documents/combine
 #### 7c. Extract Markdown from Document
 
 ```
-POST /documents/markdown
+POST api/charmonator/v1/documents/markdown
 ```
 
 - **Description**: Extracts markdown/text content from a document. If the document has a `content_chunk_group`, content is reassembled from chunks.
@@ -465,7 +465,7 @@ POST /documents/markdown
 #### 7d. Extract Summary from Document
 
 ```
-POST /documents/summary
+POST api/charmonator/v1/documents/summary
 ```
 
 - **Description**: Extracts a summary annotation from a document. Handles delta-fold format (arrays of `{"delta": "..."}` strings) by extracting and joining the delta values.
@@ -513,7 +513,7 @@ POST /documents/summary
 #### 7e. Merge Chunks by Token Count
 
 ```
-POST /documents/chunks/merge
+POST api/charmonator/v1/documents/chunks/merge
 ```
 
 - **Description**: Merges small chunks into larger ones up to a maximum token count. Creates a new chunk group with the merged results.
@@ -555,7 +555,7 @@ POST /documents/chunks/merge
 #### 7f. Extract Chunk Annotations
 
 ```
-POST /documents/chunks/annotations
+POST api/charmonator/v1/documents/chunks/annotations
 ```
 
 - **Description**: Extracts annotations from each chunk in a specified chunk group. Useful for retrieving per-chunk summaries or other annotations.
@@ -619,7 +619,7 @@ POST /documents/chunks/annotations
 ### 8. Convert Document (Long-Running with Page Tracking)
 
 ```
-POST /conversions/documents
+POST api/charmonizer/v1/conversions/documents
 ```
 
 - **Description**: Converts/transcribes an uploaded PDF into a [JSON Document Object](#document-object-specification) with chunk-based structure (e.g. pages). This is a **long-running** job that returns a `job_id` so you can poll until done.  
@@ -646,7 +646,7 @@ POST /conversions/documents
 #### Poll Job Status
 
 ```
-GET /conversions/documents/{jobId}
+GET api/charmonizer/v1/conversions/documents/{jobId}
 ```
 
 **Response** (example):
@@ -667,7 +667,7 @@ GET /conversions/documents/{jobId}
 #### Poll Final Result
 
 ```
-GET /conversions/documents/{jobId}/result
+GET api/charmonizer/v1/conversions/documents/{jobId}/result
 ```
 - If `pending`/`processing`, returns **202** + partial status.
 - If `error`, returns **500** + an error message.
@@ -735,7 +735,7 @@ GET /conversions/documents/{jobId}/result
 #### Cancel or Delete a Job
 
 ```
-DELETE /conversions/documents/{jobId}
+DELETE api/charmonizer/v1/conversions/documents/{jobId}
 ```
 - Removes the job (and any cached data) from the server.
 
@@ -748,7 +748,7 @@ DELETE /conversions/documents/{jobId}
 ### 9. Summarize a Document (Long-Running)
 
 ```
-POST /summaries
+POST api/charmonizer/v1/summaries
 ```
 
 - **Description**: Summarizes a [Document Object](#document-object-specification) in either a single pass or chunk-by-chunk. Returns a `job_id` to poll.
@@ -861,7 +861,7 @@ POST /summaries
 #### Polling Job Status
 
 ```
-GET /summaries/{job_id}
+GET api/charmonizer/v1/summaries/{job_id}
 ```
 
 **Response** (example):
@@ -879,7 +879,7 @@ GET /summaries/{job_id}
 #### Retrieving Final Result
 
 ```
-GET /summaries/{job_id}/result
+GET api/charmonizer/v1/summaries/{job_id}/result
 ```
 - If still `pending`/`processing`: HTTP 202 + partial status  
 - If `error`: HTTP 500 + error message  
@@ -914,7 +914,7 @@ GET /summaries/{job_id}/result
 ### 10. Compute Embeddings for a Document (Long-Running)
 
 ```
-POST /embeddings
+POST api/charmonizer/v1/embeddings
 ```
 
 - **Description**: Computes embeddings for all chunks in a specified group (usually `"pages"`). Returns a `job_id` to poll for completion.
@@ -942,7 +942,7 @@ POST /embeddings
 #### Poll Job Status
 
 ```
-GET /embeddings/{jobId}
+GET api/charmonizer/v1/embeddings/{jobId}
 ```
 **Response** (example):
 ```json
@@ -957,7 +957,7 @@ GET /embeddings/{jobId}
 #### Poll Final Result
 
 ```
-GET /embeddings/{jobId}/result
+GET api/charmonizer/v1/embeddings/{jobId}/result
 ```
 - If `pending`/`processing`, returns **202** + partial status.  
 - If `error`, returns **500** with an error.  
@@ -988,7 +988,7 @@ GET /embeddings/{jobId}/result
 #### Cancel or Delete a Job
 
 ```
-DELETE /embeddings/{jobId}
+DELETE api/charmonizer/v1/embeddings/{jobId}
 ```
 - Removes the job (and any data) from the server.  
 - Response: `{ "success": true }`
@@ -998,7 +998,7 @@ DELETE /embeddings/{jobId}
 ### 11. Document Chunkings (Long-Running)
 
 ```
-POST /chunkings
+POST api/charmonizer/v1/chunkings
 ```
 - **Description**: Splits or merges existing chunks in a [Document Object](#document-object-specification), returning a `job_id` to poll until the chunking operation is complete.  
 - **Currently** supports a single strategy: `"merge_and_split"`.  
@@ -1034,7 +1034,7 @@ POST /chunkings
 #### Poll Job Status
 
 ```
-GET /chunkings/:job_id
+GET api/charmonizer/v1/chunkings/{job_id}
 ```
 
 **Response** (example):
@@ -1053,7 +1053,7 @@ GET /chunkings/:job_id
 #### Poll Final Result
 
 ```
-GET /chunkings/:job_id/result
+GET api/charmonizer/v1/chunkings/{job_id}/result
 ```
 
 - If `status` is still `"pending"` or `"in_progress"`, returns **409** with `{"error":"Job not complete yet"}`.
@@ -1108,7 +1108,7 @@ The response typically:
 
 ## Transcript JSON Structure
 
-Endpoints like `/chat/extend_transcript` expect or return a **Transcript JSON** format.
+Endpoints like `api/charmonator/v1/transcript/extension` expect or return a **Transcript JSON** format.
 
 ### Overview
 
