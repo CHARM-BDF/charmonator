@@ -614,9 +614,321 @@ POST api/charmonator/v1/documents/chunks/annotations
 
 ---
 
+### 8. Markdown Operations (Synchronous)
+
+These endpoints provide synchronous, deterministic markdown processing. All operations complete immediately without job polling.
+
+#### 8a. List Markdown Chunking Strategies
+
+```
+GET api/charmonator/v1/markdown/strategies
+```
+
+- **Description**: Lists supported chunking strategies and their option schemas.
+
+- **Response**:
+  ```jsonc
+  {
+    "strategies": [
+      {
+        "id": "markdown_headers",
+        "description": "Header-aware splitting (LangChain-style MarkdownHeaderTextSplitter + token packing).",
+        "options_schema": {
+          "max_header_level": { "type": "integer", "min": 1, "max": 6, "default": 6 },
+          "include_headers_in_chunk": { "type": "boolean", "default": true }
+        }
+      },
+      {
+        "id": "markdown_blocks",
+        "description": "Block-aware splitting (paragraphs, lists, code blocks, tables) + token packing.",
+        "options_schema": { ... }
+      },
+      {
+        "id": "recursive_separators",
+        "description": "Recursive separator splitter (LangChain RecursiveCharacterTextSplitter behavior, but token-bounded).",
+        "options_schema": { ... }
+      },
+      {
+        "id": "sliding_window",
+        "description": "Pure token sliding windows (LangChain TokenTextSplitter behavior).",
+        "options_schema": {}
+      },
+      {
+        "id": "sentence_pack",
+        "description": "Sentence split + token packing (LangChain-like sentence splitter).",
+        "options_schema": { ... }
+      },
+      {
+        "id": "obsidian",
+        "description": "Obsidian-aware Markdown splitting (wikilinks, tags, callouts) + token packing.",
+        "options_schema": { ... }
+      }
+    ],
+    "supported_tokenizers": ["cl100k_base", "o200k_base"]
+  }
+  ```
+
+- **Errors**:
+  - 500 on unexpected server errors.
+
+---
+
+#### 8b. Normalize Markdown
+
+```
+POST api/charmonator/v1/markdown/normalize
+```
+
+- **Description**: Normalizes markdown in a deterministic way for stable hashing and chunking. No LLM work, purely syntactic cleanup.
+
+- **Request Body**:
+  ```jsonc
+  {
+    "markdown": "# Title\r\n\r\nSome text  \r\n\r\n- item\r\n",
+    "options": {
+      "line_endings": "lf",                  // "lf" | "crlf"
+      "trim_trailing_whitespace": true,
+      "collapse_multiple_blank_lines": true,
+      "ensure_trailing_newline": true,
+      "frontmatter": "preserve",             // "preserve" | "drop"
+      "obsidian": {
+        "normalize_callouts": true
+      }
+    }
+  }
+  ```
+
+- **Response**:
+  ```jsonc
+  {
+    "markdown": "# Title\n\nSome text\n\n- item\n",
+    "id": "sha256-of-normalized-markdown"
+  }
+  ```
+  - **`id`**: SHA-256 hash of the normalized content.
+
+- **Errors**:
+  - 400 if `markdown` is missing or not a string.
+  - 500 on unexpected errors.
+
+---
+
+#### 8c. Extract Plain Text and Metadata from Markdown
+
+```
+POST api/charmonator/v1/markdown/extract
+```
+
+- **Description**: Extracts embedding-friendly / search-friendly text and structured metadata (frontmatter, tags, wikilinks, headings).
+
+- **Request Body**:
+  ```jsonc
+  {
+    "markdown": "---\ntags: [foo]\n---\n# Title\n\nSee [[Note|alias]] and #bar.\n",
+    "options": {
+      "frontmatter": "metadata",            // "drop" | "metadata" | "prepend_text"
+      "strip_html": true,
+      "preserve_code_blocks": true,
+      "obsidian": {
+        "wikilinks": "text_only",           // "preserve" | "text_only" | "text_and_target"
+        "tags": "metadata_only"             // "preserve" | "metadata_only"
+      }
+    }
+  }
+  ```
+
+- **Response**:
+  ```jsonc
+  {
+    "text": "Title\n\nSee alias and bar.\n",
+    "metadata": {
+      "frontmatter": { "tags": ["foo"] },
+      "tags": ["bar", "foo"],
+      "links": [
+        { "raw": "[[Note|alias]]", "target": "Note", "text": "alias" }
+      ],
+      "headings": [
+        { "depth": 1, "text": "Title" }
+      ]
+    }
+  }
+  ```
+
+- **Errors**:
+  - 400 if `markdown` is missing.
+  - 500 on unexpected errors.
+
+---
+
+#### 8d. Segment Markdown into Atomic Units
+
+```
+POST api/charmonator/v1/markdown/segments
+```
+
+- **Description**: Splits markdown into deterministic segments that preserve structure. These are the atomic building blocks used by chunking strategies.
+
+- **Request Body**:
+  ```jsonc
+  {
+    "markdown": "# Title\n\nPara 1.\n\nPara 2.\n\n```js\nconsole.log('hi')\n```\n",
+    "strategy": "markdown_blocks",
+    "options": {
+      "atomic_blocks": ["code", "table", "list_item"]
+    }
+  }
+  ```
+
+- **Response**:
+  ```jsonc
+  {
+    "segments": [
+      {
+        "type": "heading",
+        "depth": 1,
+        "text": "# Title",
+        "span": { "start_line": 1, "end_line": 1 },
+        "header_path": ["Title"]
+      },
+      {
+        "type": "paragraph",
+        "text": "Para 1.",
+        "span": { "start_line": 3, "end_line": 3 },
+        "header_path": ["Title"]
+      },
+      {
+        "type": "code",
+        "language": "js",
+        "text": "```js\nconsole.log('hi')\n```",
+        "span": { "start_line": 7, "end_line": 9 },
+        "header_path": ["Title"]
+      }
+    ]
+  }
+  ```
+
+- **Errors**:
+  - 400 if `markdown` is missing.
+  - 400 if `strategy` is unknown.
+  - 500 on unexpected errors.
+
+---
+
+#### 8e. Chunk Markdown into Token-Bounded Chunks
+
+```
+POST api/charmonator/v1/markdown/chunks
+```
+
+- **Description**: Produces final chunks suitable for indexing and embedding, with deterministic chunk IDs, token counts, and optional overlap. Returns a [Document Object](#document-object-specification) with a new chunk group.
+
+- **Request Body** (Option A - raw markdown):
+  ```jsonc
+  {
+    "markdown": "# Title\n\nPara 1...\n\n## Sub\n\nPara 2...\n",
+    "strategy": "markdown_headers",
+    "max_tokens": 512,
+    "overlap_tokens": 64,
+    "tokenizer": "cl100k_base",        // OR "model": "openai:gpt-4o" (mutually exclusive)
+    "options": {
+      "max_header_level": 4,
+      "include_headers_in_chunk": true
+    },
+    "group_name": null                  // if null, server auto-generates
+  }
+  ```
+
+- **Request Body** (Option B - existing document):
+  ```jsonc
+  {
+    "document": {
+      "id": "mydoc",
+      "content": "# Title\n\nPara...\n"
+    },
+    "strategy": "obsidian",
+    "max_tokens": 512,
+    "overlap_tokens": 64,
+    "tokenizer": "cl100k_base",
+    "options": {
+      "frontmatter": "metadata",
+      "wikilinks": "text_and_target",
+      "tags": "metadata_only"
+    },
+    "group_name": "obsidian_chunks"
+  }
+  ```
+
+- **Parameters**:
+  - **`markdown`** or **`document`**: (required, mutually exclusive) Raw markdown string or existing document object.
+  - **`strategy`**: (required) One of: `markdown_headers`, `markdown_blocks`, `recursive_separators`, `sliding_window`, `sentence_pack`, `obsidian`.
+  - **`max_tokens`**: (required) Maximum tokens per chunk.
+  - **`overlap_tokens`**: (optional) Overlap tokens between chunks. Default: 0.
+  - **`tokenizer`** or **`model`**: (optional, mutually exclusive) Tokenizer encoding or model name to look up tokenizer. Default: `cl100k_base`.
+  - **`options`**: (optional) Strategy-specific options.
+  - **`group_name`**: (optional) Custom chunk group name. Auto-generated if null.
+
+- **Response**:
+  ```jsonc
+  {
+    "document": {
+      "id": "sha256hash...",
+      "content": "# Title\n\nPara 1...\n\n## Sub\n\nPara 2...\n",
+      "metadata": {
+        "mimetype": "text/markdown",
+        "chunking": {
+          "strategy": "markdown_headers",
+          "max_tokens": 512,
+          "overlap_tokens": 64,
+          "encoding": "cl100k_base"
+        }
+      },
+      "chunks": {
+        "markdown:markdown_headers(512,cl100k_base,overlap=64)": [
+          {
+            "id": "sha256hash.../markdown:markdown_headers(512,cl100k_base,overlap=64)@0",
+            "parent": "sha256hash...",
+            "content": "# Title\n\nPara 1...\n",
+            "metadata": {
+              "chunk_index": 0,
+              "token_count": 211,
+              "header_path": ["Title"],
+              "span": { "start_line": 1, "end_line": 3 }
+            }
+          },
+          {
+            "id": "sha256hash.../markdown:markdown_headers(512,cl100k_base,overlap=64)@1",
+            "parent": "sha256hash...",
+            "content": "## Sub\n\nPara 2...\n",
+            "metadata": {
+              "chunk_index": 1,
+              "token_count": 187,
+              "header_path": ["Title", "Sub"],
+              "span": { "start_line": 5, "end_line": 7 }
+            }
+          }
+        ]
+      }
+    },
+    "chunk_group": "markdown:markdown_headers(512,cl100k_base,overlap=64)",
+    "chunks_created": 2,
+    "warnings": []
+  }
+  ```
+
+- **Errors**:
+  - 400 if neither `markdown` nor `document` is provided.
+  - 400 if both `markdown` and `document` are provided.
+  - 400 if both `tokenizer` and `model` are provided.
+  - 400 if `max_tokens` is invalid (<= 0) or `overlap_tokens` >= `max_tokens`.
+  - 400 if `model` resolves to API tokenizer mode.
+  - 400 if `strategy` is unknown.
+  - 500 on unexpected errors.
+
+---
+
 ## Charmonizer Endpoints
 
-### 8. Convert Document (Long-Running with Page Tracking)
+### 9. Convert Document (Long-Running with Page Tracking)
 
 ```
 POST api/charmonizer/v1/conversions/documents
@@ -745,7 +1057,7 @@ DELETE api/charmonizer/v1/conversions/documents/{jobId}
 
 ---
 
-### 9. Summarize a Document (Long-Running)
+### 10. Summarize a Document (Long-Running)
 
 ```
 POST api/charmonizer/v1/summaries
@@ -911,7 +1223,7 @@ GET api/charmonizer/v1/summaries/{job_id}/result
 
 ---
 
-### 10. Compute Embeddings for a Document (Long-Running)
+### 11. Compute Embeddings for a Document (Long-Running)
 
 ```
 POST api/charmonizer/v1/embeddings
@@ -995,7 +1307,7 @@ DELETE api/charmonizer/v1/embeddings/{jobId}
 
 ---
 
-### 11. Document Chunkings (Long-Running)
+### 12. Document Chunkings (Long-Running)
 
 ```
 POST api/charmonizer/v1/chunkings
