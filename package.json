@@ -7,7 +7,6 @@
     "test": "./node_modules/.bin/mocha --tags \"not:llm\" test/**/*.spec.mjs",
     "test:all": "./node_modules/.bin/mocha  test/**/*.spec.mjs",
     "test:myfavorite": "node ./node_modules/mocha/bin/mocha  --grep \"list available models\"",
-    "test:new": "env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha test/testEndpointTokens.spec.mjs test/testMarkdownChunks.spec.mjs test/testMarkdownExtract.spec.mjs test/testMarkdownNormalize.spec.mjs test/testMarkdownSegments.spec.mjs test/testMcpServer.spec.mjs",
     "test:ci": "env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha --tags \"not:llm\" test/**/*.spec.mjs",
     "postinstall": "mkdir -p test/data && touch test/data/05-versions-space.pdf  # pdf-parse workaround"
   },
