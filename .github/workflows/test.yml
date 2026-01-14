@@ -34,4 +34,4 @@ jobs:
         with:
           name: Mocha Tests           # Name of the check run which will be created
           path: test/test_result.json # Path to test results
-          reporter: json              # Format of test results
+          reporter: mocha-json              # Format of test results
