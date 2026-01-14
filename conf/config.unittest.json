@@ -1,4 +1,8 @@
 {
+  "server": {
+    "baseUrl": "",
+    "port": 5003
+  },
   "max_attempts": 3,
   "ms_client_request_timeout": 600001,
   "models": {
