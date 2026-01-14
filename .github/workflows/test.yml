@@ -24,3 +24,9 @@ jobs:
 
       - name: Run tests
         run: npm run test:ci
+
+      - uses: actions/upload-artifact@v2  # upload test results
+        if: success() || failure()        # run this step even if previous step failed
+        with:
+          name: test-results
+          path: test/reports/*.json
