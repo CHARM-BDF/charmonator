@@ -1,0 +1,19 @@
+# Works around a strange Github Actions permission policy.
+#   see: https://github.com/marketplace/actions/test-reporting?utm_source=chatgpt.com#recommended-setup-for-public-repositories
+name: 'Test Report'
+on:
+  workflow_run:
+    workflows: ['ci_test']   # runs after CI workflow
+    types:
+      - completed
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: phoenix-actions/test-reporting@v8
+      id: test-report                     # Set ID reference for step
+      with:
+        artifact: test-results            # artifact name
+        name: Send Mocha Test Reports     # Name of the check run which will be created
+        path: 'test/reports/*.json'       # Path to test results (inside artifact .zip)
+        reporter: mocha-jest              # Format of test results
