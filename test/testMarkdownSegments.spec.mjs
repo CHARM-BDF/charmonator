@@ -70,7 +70,7 @@ describe('Markdown Segmentation Tests', function() {
   });
 
   it('Test 9: Nested headings fixture', function() {
-    const fixturePath = path.join(__dirname, 'fixtures', 'markdown', 'headings-nested.md');
+    const fixturePath = path.join(__dirname, 'data', 'markdown', 'headings-nested.md');
     const input = fs.readFileSync(fixturePath, 'utf8');
     const segments = segmentMarkdown(input, 'markdown_blocks');
     const headings = segments.filter(s => s.type === 'heading');

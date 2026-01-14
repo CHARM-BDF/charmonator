@@ -70,7 +70,7 @@ tags().describe('Markdown chunking tests', function() {
   });
 
   it('Test 6: No chunk exceeds max_tokens', function() {
-    const fixturePath = path.join(__dirname, 'fixtures/markdown/headings-nested.md');
+    const fixturePath = path.join(__dirname, 'data/markdown/headings-nested.md');
     const input = fs.readFileSync(fixturePath, 'utf8');
     const maxTokens = 50;
     const result = chunkMarkdown(input, {
@@ -148,7 +148,7 @@ tags().describe('Markdown chunking tests', function() {
   });
 
   it('Test 12: Obsidian strategy with fixture', function() {
-    const fixturePath = path.join(__dirname, 'fixtures/markdown/obsidian-full.md');
+    const fixturePath = path.join(__dirname, 'data/markdown/obsidian-full.md');
     const input = fs.readFileSync(fixturePath, 'utf8');
     const result = chunkMarkdown(input, {
       strategy: 'obsidian',
