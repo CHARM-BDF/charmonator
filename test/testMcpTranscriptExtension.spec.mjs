@@ -34,6 +34,9 @@ tags().describe('MCP Integration Tests', function() {
 
   // Stop both servers after tests
   after(async function() {
+    // Use a reasonable timeout for cleanup
+    this.timeout(10000);
+
     // Shutdown charmonator server
     processes.cleanup()
     console.log('Charmonator server stopped');
