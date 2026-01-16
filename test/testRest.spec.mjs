@@ -83,10 +83,10 @@ function hasModel(data, modelname) {
 }
 
 describe('My REST tests', function() {
-  let server;
+  let processes;
 
   before(async function() {
-    server = await createAndStart()
+    processes = await createAndStart();
     const url = getModelsUrl()
     let r = await getModels()
     if(!(r.status >= 200 && r.status < 300)) {
@@ -105,9 +105,9 @@ describe('My REST tests', function() {
   });
 
   after(async function() {
-    await new Promise(resolve => {
-      server.close(resolve);
-    });
+    // First run the MCP cleanup
+    await processes.cleanup();
+    console.log('Charmonator processes stopped');
   })
 
   tags().describe('testAllCharmonatorEndpoints', function() {
