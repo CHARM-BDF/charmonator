@@ -1,10 +1,11 @@
-// extend-transcript.mjs
 import express from 'express';
 import { fetchChatModel } from '../lib/core.mjs';
 import { TranscriptFragment } from '../lib/transcript.mjs';
 import { FunctionTool } from '../lib/function.mjs';
 import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
 import { ToolKind, ToolDefinition } from '../lib/tool-definition.mjs';
+import { toolRegistry } from '../lib/tools.mjs';
+import { mcpManager } from '../lib/mcp/mcp-manager.mjs';
 
 const router = express.Router();
 
@@ -73,6 +74,18 @@ router.post('/extension', async (req, res) => {
         chatModel.addTool(clientTool);
       });
       console.log(`[transcript-extension] Registered ${client_tools.length} client tool(s)`);
+    }
+
+    // Register MCP tools if available
+    if (mcpManager && mcpManager.getAllTools) {
+      const mcpTools = mcpManager.getAllTools();
+      for (const mcpTool of mcpTools) {
+        const tool = toolRegistry.getTool(mcpTool.name);
+        if (tool) {
+          chatModel.addTool(tool);
+        }
+      }
+      console.log(`[transcript-extension] Registered ${mcpTools.length} MCP tool(s)`);
     }
 
     // Convert incoming transcript to internal format
