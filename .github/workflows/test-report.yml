@@ -9,11 +9,16 @@ on:
 jobs:
   report:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: write
+      contents: read
     steps:
-    - uses: phoenix-actions/test-reporting@v8
+    - uses: phoenix-actions/test-reporting@v15
       id: test-report                     # Set ID reference for step
       with:
         artifact: test-results            # artifact name
         name: Send Mocha Test Reports     # Name of the check run which will be created
         path: '*.json'                    # Path to test results (inside artifact .zip)
         reporter: mocha-json              # Format of test results
+
