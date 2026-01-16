@@ -114,7 +114,7 @@ tags().describe('MCP Integration Tests', function() {
       temperature: 0.0,
       transcript: {
         messages: [
-          { role: 'user', content: 'What is 42 * 73? Please use the calculator tool.' }
+          { role: 'user', content: 'What is 42 * 73? Please use the calculator tool.  Do not textually reformat the response of the tool.' }
         ]
       }
     };
@@ -134,7 +134,7 @@ tags().describe('MCP Integration Tests', function() {
     const hasToolCall = data.messages.some(msg => 
       msg.role === 'tool_call' && 
       msg.content && 
-      msg.content.some(c => c.toolName === 'calc')
+      msg.content.some(c => c.toolName === 'calculator')
     );
 
     assert(hasToolCall, 'Response should include a call to the calculator tool');
@@ -143,7 +143,7 @@ tags().describe('MCP Integration Tests', function() {
     const hasToolResponse = data.messages.some(msg => 
       msg.role === 'tool_response' && 
       msg.content && 
-      msg.content.some(c => c.toolName === 'calc')
+      msg.content.some(c => c.toolName === 'calculator')
     );
 
     assert(hasToolResponse, 'Response should include a tool response from the calculator tool');
