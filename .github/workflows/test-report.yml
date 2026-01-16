@@ -6,13 +6,13 @@ on:
     workflows: ['ci_test']   # runs after CI workflow
     types:
       - completed
-permissions:
-  actions: read
-  checks: write
-  contents: read
 jobs:
   report:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: write
+      contents: read
     steps:
     - uses: phoenix-actions/test-reporting@v15
       id: test-report                     # Set ID reference for step
