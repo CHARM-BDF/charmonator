@@ -5,6 +5,25 @@
   },
   "max_attempts": 3,
   "ms_client_request_timeout": 600001,
+  "mcp": {
+    "servers": {
+      "test": {
+        "command": "node",
+        "args": ["./mcp-servers/test-server.mjs"],
+        "env": {}
+      }
+    },
+    "tools": {
+      "echo": {
+        "server": "test",
+        "tool": "echo"
+      },
+      "calc": {
+        "server": "test",
+        "tool": "calculator"
+      }
+    }
+  },
   "models": {
     "my-unittest-model": {
         "api": "OpenAI",
