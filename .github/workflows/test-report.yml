@@ -6,6 +6,10 @@ on:
     workflows: ['ci_test']   # runs after CI workflow
     types:
       - completed
+permissions:
+  actions: read
+  checks: write
+  contents: read
 jobs:
   report:
     runs-on: ubuntu-latest
