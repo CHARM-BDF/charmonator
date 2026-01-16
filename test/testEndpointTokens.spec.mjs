@@ -36,6 +36,9 @@ tags().describe('Tokens Endpoint Tests', function() {
 
   // Stop the server after tests
   after(async function() {
+    // Use a reasonable timeout for cleanup
+    this.timeout(10000);
+
     processes.cleanup()
   });
 

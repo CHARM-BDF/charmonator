@@ -105,6 +105,9 @@ describe('My REST tests', function() {
   });
 
   after(async function() {
+    // Use a reasonable timeout for cleanup
+    this.timeout(10000);
+
     // First run the MCP cleanup
     await processes.cleanup();
     console.log('Charmonator processes stopped');
