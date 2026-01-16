@@ -21,4 +21,7 @@ jobs:
         name: Send Mocha Test Reports     # Name of the check run which will be created
         path: '*.json'                    # Path to test results (inside artifact .zip)
         reporter: mocha-json              # Format of test results
-
+    - name: Print check run URL
+      run: |
+        echo "Check run URL:"
+        echo "https://github.com/${{ github.repository }}/runs/${{ steps.test-report.outputs.run_id }}"
