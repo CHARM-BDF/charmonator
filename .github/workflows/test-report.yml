@@ -21,3 +21,4 @@ jobs:
         name: Send Mocha Test Reports     # Name of the check run which will be created
         path: '*.json'                    # Path to test results (inside artifact .zip)
         reporter: mocha-json              # Format of test results
+
