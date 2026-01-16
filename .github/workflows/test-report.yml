@@ -24,4 +24,4 @@ jobs:
     - name: Print check run URL
       run: |
         echo "Check run URL:"
-        echo "https://github.com/${{ github.repository }}/runs/${{ steps.test-report.outputs.run_id }}"
+        echo "${{ steps.test-report.outputs.runHtmlUrl }}"
