@@ -19,36 +19,24 @@ const baseCharmonatorUrl = `http://localhost:${__port}/api/charmonator/v1`;
 // the upper bound time for failing a test.
 const timeoutMargin = 5;
 
-// Path to the MCP test server
-const mcpServerPath = path.join(__dirname, '..', 'mcp-servers', 'test-server.mjs');
-
 tags().describe('MCP Integration Tests', function() {
+  let processes;
   let server;
-  let mcpServerProc;
 
   // Start both the charmonator server and MCP test server before tests
   before(async function() {
     this.timeout(10000); // Allow time for both servers to start
 
-    server = await createAndStart();
+    processes = await createAndStart();
+    server = processes.server;
     console.log('Charmonator server started with MCP configuration');
   });
 
   // Stop both servers after tests
   after(async function() {
     // Shutdown charmonator server
-    if (server) {
-      await new Promise(resolve => {
-        server.close(resolve);
-      });
-      console.log('Charmonator server stopped');
-    }
-
-    // Shutdown MCP server
-    if (mcpServerProc) {
-      mcpServerProc.kill('SIGTERM');
-      console.log('MCP test server stopped');
-    }
+    processes.cleanup()
+    console.log('Charmonator server stopped');
   });
 
   // Test the echo tool via transcript/extension endpoint

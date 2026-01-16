@@ -25,18 +25,18 @@ async function postJson(endpoint, body) {
 }
 
 tags().describe('Tokens Endpoint Tests', function() {
+  let processes;
   let server;
 
   // Start the server before tests
   before(async function() {
-    server = await createAndStart();
+    processes = await createAndStart();
+    server = processes.server;
   });
 
   // Stop the server after tests
   after(async function() {
-    await new Promise(resolve => {
-      server.close(resolve);
-    });
+    processes.cleanup()
   });
 
   // ---------------------------------------------------------------------------
