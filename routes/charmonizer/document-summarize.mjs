@@ -4,7 +4,8 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { fetchChatModel } from '../../lib/core.mjs';
 import { JSONDocument, tokenCount } from '../../lib/json-document.mjs';
-import { jsonSafeFromException } from '../../lib/providers/provider_exception.mjs';
+import { jsonSafeFromException, ProviderException } from '../../lib/providers/provider_exception.mjs';
+import { getConfig } from '../../lib/config.mjs';
 
 /**
  * We'll store summarization jobs in memory. For production, use a DB or persistent store.
@@ -157,7 +158,8 @@ function createJobRecord(docObject, params) {
   const options = {
     ...params.options,
     ms_client_request_timeout: params.ms_client_request_timeout,
-    num_client_request_max_attempts: params.num_client_request_max_attempts
+    num_client_request_max_attempts: params.num_client_request_max_attempts,
+    num_defective_reply_max_attempts: params.num_defective_reply_max_attempts
   }
   jobs[jobId] = {
     id: jobId,
@@ -893,17 +895,31 @@ function makeChatModel(modelName, systemText, temperature) {
  */
 async function callLLM(chatModel, minimalTranscript, options = {}) {
   console.log("minimalTranscript:", minimalTranscript);
+  let nAttemptsLeft = 1 + options.num_defective_reply_max_attempts;
+  while (nAttemptsLeft>=0) {
+    nAttemptsLeft = nAttemptsLeft-1;
+    const prefixFrag = {
+      messages: minimalTranscript.map(m => ({ role: m.role, content: m.content }))
+    };
 
-  const prefixFrag = {
-    messages: minimalTranscript.map(m => ({ role: m.role, content: m.content }))
-  };
-
-  const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
-  const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
-  if (!lastMsg || lastMsg.role !== 'assistant') {
-    return '(No output from LLM?)';
+    const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
+    const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
+    if (!lastMsg || !lastMsg.content || lastMsg.content.length===0) {
+      console.log({event:'Defective reply from from LLM, retrying', nAttemptsLeft});
+    } else {
+      if(lastMsg.role !== 'assistant') {
+        console.log({event:"Warning: last reply from the LLM isn't?"});
+      }
+      return lastMsg.content;
+    }
   }
-  return lastMsg.content;
+  // Technically not a provider-specific exception, but this is the best way we have set up to communicate
+  // rare edge cases.
+  let ex = new ProviderException("Exhausted num_defective_reply_max_attempts.  Something seems to be wrong with this model or prompt.")
+  ex.interpretedErrorType = 'unclassified_api_error';
+  ex.interpretedCode = 500;
+  ex.interpretedMessage = 'An error occurred while processing your request.';
+  throw ex
 }
 
 const router = express.Router();
@@ -953,6 +969,7 @@ router.post('/', async (req, res) => {
 
       ms_client_request_timeout = null,
       num_client_request_max_attempts = null,
+      num_defective_reply_max_attempts = getConfig().num_defective_reply_max_attempts,
 
       merge_summaries_guidance,
       merge_mode,
@@ -992,6 +1009,7 @@ router.post('/', async (req, res) => {
 
       ms_client_request_timeout,
       num_client_request_max_attempts,
+      num_defective_reply_max_attempts,
 
       merge_summaries_guidance: merge_summaries_guidance || '',
       merge_mode: merge_mode || 'left-to-right',

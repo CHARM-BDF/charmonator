@@ -73,6 +73,14 @@ Aliases are resolved recursively, and circular references are detected and will 
   - Defaults to 2.
   - If specified in a model, model value overrides the global value.
 
+- num_defective_reply_max_attempts (rare to change)
+  - Very occasionally (less than 1 in 10000 calls), some providers will respond to a request without emitting any messages at all, not even empty ones.  We call this a "defective" response.
+  - This parameter configures a retry loop around the situation.
+  - This setting does not apply to empty responses.
+  - Number of times to attempt each downstream HTTP call.  Before any timeout, the first call counts as 1 attempt.
+  - The name "attempts after" is for brevity but it's really the number of total attempts.
+  - Defaults to 5.
+
 - server
   - An object containing settings for the HTTP server and path prefixes.
   - Keys within server:
