@@ -51,6 +51,9 @@ tags().describe('MCP Integration Tests', function() {
       model: mymodel,
       system: 'You are a helpful assistant. Use the echo tool to respond to the user.',
       temperature: 0.0,
+      tools: [
+        {"name":"echo"}
+      ],
       transcript: {
         messages: [
           { role: 'user', content: 'Please use the echo tool to repeat this message: "Hello from MCP test!"' }
@@ -103,6 +106,9 @@ tags().describe('MCP Integration Tests', function() {
       model: mymodel,
       system: 'You are a helpful assistant. Use the calculator tool to solve math problems.',
       temperature: 0.0,
+      tools: [
+        {"name":"calculator"}
+      ],
       transcript: {
         messages: [
           { role: 'user', content: 'What is 42 * 73? Please use the calculator tool.  Do not textually reformat the response of the tool.' }
