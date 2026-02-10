@@ -48,30 +48,34 @@ router.post('/extension', async (req, res) => {
     // Register ephemeral server tools (legacy, with placeholder implementation)
     if (tools) {
       tools.forEach(toolConfig => {
-        const tool = new FunctionTool(async (args) => {
-          // In real implementation, do the actual tool work here.
-          return { result: 'Tool execution placeholder' };
-        });
-        tool.name = toolConfig.name;
-        tool.description = toolConfig.description;
-        tool.input_schema = toolConfig.input_schema;
-        tool.kind = ToolKind.SERVER;  // Explicit server kind
-        chatModel.addTool(tool);
+        const tool2 = toolRegistry.getTool(toolConfig.name)
+        chatModel.addTool(tool2);
+
+        // const tool = new FunctionTool(async (args) => {
+        //   // In real implementation, do the actual tool work here.
+        //   return { result: 'Tool execution placeholder' };
+        // });
+        // tool.name = toolConfig.name;
+        // tool.description = toolConfig.description;
+        // tool.input_schema = toolConfig.input_schema;
+        // tool.kind = ToolKind.SERVER;  // Explicit server kind
+        // chatModel.addTool(tool);
       });
     }
 
     // Register client-side tools (schema only, no server-side execution)
     if (client_tools && Array.isArray(client_tools)) {
       client_tools.forEach(toolSchema => {
-        const clientTool = new ToolDefinition({
-          kind: ToolKind.CLIENT,
-          name: toolSchema.name,
-          description: toolSchema.description,
-          input_schema: toolSchema.input_schema,
-          run: undefined,  // Client tools have no server-side run
-          meta: { source: 'request' }
-        });
-        chatModel.addTool(clientTool);
+        // const clientTool = new ToolDefinition({
+        //   kind: ToolKind.CLIENT,
+        //   name: toolSchema.name,
+        //   description: toolSchema.description,
+        //   input_schema: toolSchema.input_schema,
+        //   run: undefined,  // Client tools have no server-side run
+        //   meta: { source: 'request' }
+        // });
+        // chatModel.addTool(clientTool);
+        chatModel.enableTool(toolSchema?.name)
       });
       console.log(`[transcript-extension] Registered ${client_tools.length} client tool(s)`);
     }
@@ -81,9 +85,6 @@ router.post('/extension', async (req, res) => {
       const mcpTools = mcpManager.getAllTools();
       for (const mcpTool of mcpTools) {
         const tool = toolRegistry.getTool(mcpTool.name);
-        if (tool) {
-          chatModel.addTool(tool);
-        }
       }
       console.log(`[transcript-extension] Registered ${mcpTools.length} MCP tool(s)`);
     }
