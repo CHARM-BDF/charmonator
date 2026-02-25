@@ -1,0 +1,9 @@
+{
+  "status": "Done",
+  "pk": "test-pk-12345",
+  "merged_version": "merged-pk-67890",
+  "children": [
+    { "actor": { "agent": "ara-aragorn" }, "status": "Done" },
+    { "actor": { "agent": "ara-arax" }, "status": "Done" }
+  ]
+}

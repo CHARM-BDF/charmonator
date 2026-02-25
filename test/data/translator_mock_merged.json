@@ -1,0 +1,187 @@
+{
+  "fields": {
+    "data": {
+      "message": {
+        "results": [
+          {
+            "rank": 1,
+            "sugeno": 0.85,
+            "weighted_mean": 0.78,
+            "normalized_score": 92.5,
+            "ordering_components": {
+              "novelty": 0.6,
+              "confidence": 0.9,
+              "clinical_evidence": 0.7
+            },
+            "node_bindings": {
+              "n0": [{ "id": "MONDO:0005148" }],
+              "n1": [{ "id": "CHEBI:6801" }]
+            },
+            "analyses": [
+              {
+                "resource_id": "infores:aragorn",
+                "score": 0.88,
+                "edge_bindings": {
+                  "e0": [{ "id": "edge-001" }]
+                }
+              },
+              {
+                "resource_id": "infores:rtx-kg2",
+                "score": 0.75,
+                "edge_bindings": {
+                  "e0": [{ "id": "edge-001" }]
+                }
+              }
+            ]
+          },
+          {
+            "rank": 2,
+            "sugeno": 0.72,
+            "normalized_score": 78.3,
+            "node_bindings": {
+              "n0": [{ "id": "MONDO:0005148" }],
+              "n1": [{ "id": "NCBIGene:6531" }]
+            },
+            "analyses": [
+              {
+                "resource_id": "infores:biothings-explorer",
+                "score": 0.65,
+                "edge_bindings": {
+                  "e0": [{ "id": "edge-002" }]
+                }
+              }
+            ]
+          },
+          {
+            "rank": 3,
+            "node_bindings": {
+              "n0": [{ "id": "MONDO:0005148" }],
+              "n1": [{ "id": "HGNC:10936" }]
+            },
+            "analyses": [
+              {
+                "resource_id": "infores:improving-agent",
+                "score": 0.55,
+                "edge_bindings": {
+                  "e0": [{ "id": "edge-003" }]
+                }
+              }
+            ]
+          }
+        ],
+        "knowledge_graph": {
+          "nodes": {
+            "MONDO:0005148": {
+              "name": "type 2 diabetes mellitus",
+              "categories": ["biolink:Disease"]
+            },
+            "CHEBI:6801": {
+              "name": "metformin",
+              "categories": ["biolink:SmallMolecule"]
+            },
+            "NCBIGene:6531": {
+              "name": "SLC6A3",
+              "categories": ["biolink:Gene"]
+            },
+            "HGNC:10936": {
+              "name": "SLC7A10",
+              "categories": ["biolink:Gene"]
+            },
+            "GO:0006954": {
+              "name": "inflammatory response",
+              "categories": ["biolink:BiologicalProcess"]
+            }
+          },
+          "edges": {
+            "edge-001": {
+              "subject": "CHEBI:6801",
+              "object": "MONDO:0005148",
+              "predicate": "biolink:treats",
+              "sources": [
+                { "resource_role": "primary_knowledge_source", "resource_id": "infores:chembl" },
+                { "resource_role": "aggregator_knowledge_source", "resource_id": "infores:aragorn" }
+              ],
+              "qualifiers": [
+                {
+                  "qualifier_type_id": "biolink:qualified_predicate",
+                  "qualifier_value": "biolink:causes"
+                },
+                {
+                  "qualifier_type_id": "biolink:object_direction_qualifier",
+                  "qualifier_value": "decreased"
+                },
+                {
+                  "qualifier_type_id": "biolink:object_aspect_qualifier",
+                  "qualifier_value": "activity"
+                }
+              ],
+              "attributes": [
+                {
+                  "attribute_type_id": "biolink:publications",
+                  "value": ["PMID:12345", "PMID:67890"]
+                }
+              ]
+            },
+            "edge-002": {
+              "subject": "NCBIGene:6531",
+              "object": "MONDO:0005148",
+              "predicate": "biolink:gene_associated_with_condition",
+              "sources": [
+                { "resource_role": "primary_knowledge_source", "resource_id": "infores:disgenet" }
+              ],
+              "qualifiers": [],
+              "attributes": []
+            },
+            "edge-003": {
+              "subject": "HGNC:10936",
+              "object": "MONDO:0005148",
+              "predicate": "biolink:gene_associated_with_condition",
+              "sources": [
+                { "resource_role": "primary_knowledge_source", "resource_id": "infores:omim" },
+                { "resource_role": "aggregator_knowledge_source", "resource_id": "infores:monarchinitiative" },
+                { "resource_role": "aggregator_knowledge_source", "resource_id": "infores:rtx-kg2" }
+              ],
+              "qualifiers": [],
+              "attributes": [
+                {
+                  "attribute_type_id": "biolink:support_graphs",
+                  "value": ["support-graph-001"]
+                }
+              ]
+            },
+            "edge-bg-001": {
+              "subject": "GO:0006954",
+              "object": "MONDO:0005148",
+              "predicate": "biolink:related_to",
+              "sources": [
+                { "resource_role": "primary_knowledge_source", "resource_id": "infores:go" }
+              ],
+              "qualifiers": [],
+              "attributes": []
+            },
+            "edge-support-001": {
+              "subject": "HGNC:10936",
+              "object": "NCBIGene:6531",
+              "predicate": "biolink:interacts_with",
+              "sources": [
+                { "resource_role": "primary_knowledge_source", "resource_id": "infores:intact" }
+              ],
+              "qualifiers": [],
+              "attributes": [
+                {
+                  "attribute_type_id": "biolink:publications",
+                  "value": ["PMID:11111"]
+                }
+              ]
+            }
+          }
+        },
+        "auxiliary_graphs": {
+          "support-graph-001": {
+            "edges": ["edge-support-001"]
+          }
+        }
+      }
+    }
+  }
+}
