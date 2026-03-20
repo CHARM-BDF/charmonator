@@ -97,6 +97,46 @@ tags().describe('MCP Integration Tests', function() {
       'Final message should contain the echoed text');
   });
 
+  tags('llm').it('should not call MCP echo tool without request via transcript/extension', async function() {
+    this.timeout(5000 * timeoutMargin);
+
+    const url = `${baseCharmonatorUrl}/transcript/extension`;
+    const body = {
+      model: mymodel,
+      system: 'You are a helpful assistant. Use the echo tool to respond to the user.',
+      temperature: 0.0,
+      tools: [
+        // no tools requested
+      ],
+      transcript: {
+        messages: [
+          { role: 'user', content: 'Please use the echo tool to repeat this message: "Hello from MCP test!"' }
+        ]
+      }
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    assert(response.status >= 200 && response.status < 300, `Expected 2xx status, got ${response.status}`);
+
+    const data = await response.json();
+    console.log(JSON.stringify({data}))
+    assert(Array.isArray(data.messages), 'Response should contain messages array');
+
+    // Verify the response contains a tool call to the echo tool
+    const hasToolCall = data.messages.some(msg =>
+      msg.role === 'tool_call' &&
+      msg.content &&
+      msg.content.some(c => c.toolName === 'echo')
+    );
+
+    assert(!hasToolCall, 'Response should not include tool call not requested');
+  });
+
   // Test the calculator tool via transcript/extension endpoint
   tags('llm').it('should call MCP calculator tool via transcript/extension', async function() {
     this.timeout(5000 * timeoutMargin);
