@@ -15,18 +15,18 @@ tags('legacy').describe('Legacy toolbox config (requests)', function() {
   before(async function() {
     this.timeout(10000);
 
-    assert.equal(
-      process.env.CHARMONATOR_CONFIG,
-      'conf/config.unittest.legacy.json',
-      'Set CHARMONATOR_CONFIG=conf/config.unittest.legacy.json (use npm run test:legacy)'
-    );
+    // hack: Legacy tests need legacy config, but don't break the non-legacy tests
+    if (process.env.CHARMONATOR_CONFIG !== 'conf/config.unittest.legacy.json') {
+      this.skip();
+      return;
+    }
 
     processes = await createAndStart();
   });
 
   after(async function() {
     this.timeout(10000);
-    processes.cleanup();
+    await processes?.cleanup?.();
   });
 
   it('should list legacy tools on tools/list', async function() {
@@ -76,4 +76,3 @@ tags('legacy').describe('Legacy toolbox config (requests)', function() {
     assert(String(calcResponse.content).includes('3066'), 'calculator response should contain 3066');
   });
 });
-
