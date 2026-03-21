@@ -49,6 +49,9 @@ router.post('/extension', async (req, res) => {
     if (tools) {
       tools.forEach(toolConfig => {
         const tool2 = toolRegistry.getTool(toolConfig.name)
+        if (!tool2) {
+          throw new Error(`Tool ${toolConfig.name} not found`);
+        }
         chatModel.addTool(tool2);
 
         // const tool = new FunctionTool(async (args) => {
@@ -75,7 +78,9 @@ router.post('/extension', async (req, res) => {
         //   meta: { source: 'request' }
         // });
         // chatModel.addTool(clientTool);
-        chatModel.enableTool(toolSchema?.name)
+        if (toolSchema?.name) {
+          chatModel.enableTool(toolSchema.name)
+        }
       });
       console.log(`[transcript-extension] Registered ${client_tools.length} client tool(s)`);
     }
