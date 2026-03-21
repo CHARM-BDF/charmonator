@@ -99,7 +99,10 @@ POST api/charmonator/v1/transcript/extension
 - **`system`** (string, optional): The system or developer instructions.  
 - **`temperature`** (number, optional): Sampling temperature.  
 - **`transcript`** (object, required): The partial transcript so far.  
-- **`tools`** (array, optional): Additional ephemeral tools to register.  
+- **`tools`** (array, optional): Tools to expose for this request. These may include:
+  - Named tools already configured on the server (legacy JS tools or MCP tools), e.g. `{ "name": "echo" }`.
+  - Ephemeral schema-only tools for the model to call.
+- **`client_tools`** (array, optional): Schema-only tools that the *client* will execute. The model may emit `tool_call` messages for these; the client must respond with `tool_response` messages and call `/tools/execute` only for server/MCP tools.
 - **`ms_client_request_timeout`** (number, optional): Override configured time limit for downstream HTTP client calls, in milliseconds.  See [configuration.md](configuration.md#top-level-keys) for details.
 - **`max_timeout`** (number, optional): Override configured number of attempts for each downstream HTTP client call.  See [configuration.md](configuration.md#top-level-keys) for details.
 - **`options`** (object, optional):  
@@ -127,7 +130,74 @@ POST api/charmonator/v1/transcript/extension
 
 ---
 
-### 3. Convert Image to Markdown
+### 3. List Tools
+
+```
+GET api/charmonator/v1/tools/list
+```
+
+- **Description**: Lists all executable server-side tools currently registered (legacy JS tools + MCP tools).
+
+#### Response (example)
+
+```json
+{
+  "tools": [
+    {
+      "name": "echo",
+      "description": "Echo back the provided message",
+      "input_schema": {
+        "type": "object",
+        "properties": { "message": { "type": "string" } },
+        "required": ["message"]
+      }
+    }
+  ]
+}
+```
+
+---
+
+### 4. Execute Tools
+
+```
+POST api/charmonator/v1/tools/execute
+```
+
+- **Description**: Executes one or more server/MCP tools explicitly.
+
+#### Request Body (example)
+
+```json
+{
+  "toolCalls": [
+    {
+      "toolName": "echo",
+      "callId": "call-123",
+      "arguments": { "message": "hello" }
+    }
+  ]
+}
+```
+
+#### Response (example)
+
+```json
+{
+  "toolResponses": [
+    {
+      "toolName": "echo",
+      "callId": "call-123",
+      "content": "{\n  \"message\": \"hello\"\n}",
+      "error": null
+    }
+  ]
+}
+```
+
+---
+
+### 5. Convert Image to Markdown
 
 ```
 POST api/charmonator/v1/conversion/image
@@ -182,7 +252,7 @@ POST api/charmonator/v1/conversion/image
 
 ---
 
-### 4. Convert File to Markdown
+### 6. Convert File to Markdown
 
 ```
 POST api/charmonator/v1/conversion/file
@@ -208,7 +278,7 @@ POST api/charmonator/v1/conversion/file
 
 ---
 
-### 5. Generate Embedding
+### 7. Generate Embedding
 
 ```
 POST api/charmonator/v1/embedding

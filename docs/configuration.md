@@ -108,7 +108,7 @@ Aliases are resolved recursively, and circular references are detected and will 
       - Defaults to "./jobs" or a user-specific directory if not set.
 
 - tools
-  - An object that defines named “tools” (a.k.a. function calls) that a model can access.
+  - An object that defines **server-side tools** (a.k.a. function calls) implemented as JS modules.
   - The key is the tool’s name; the value is an object describing how to load it. For example:
 ```
     {
@@ -128,6 +128,42 @@ Aliases are resolved recursively, and circular references are detected and will 
     - class: the exported class name (if the file has multiple exports).
     - options: any JSON object with config for that tool.
   - Tools can be referenced by any model under its "tools" array.
+
+- mcp
+  - Optional configuration for MCP (Model Context Protocol) tool servers.
+  - MCP tools are discovered from external processes (stdio JSON-RPC) and can be exposed under local tool names.
+  - Keys within mcp:
+    - servers
+      - Map of server id → process config.
+      - Each server config:
+        - command: executable to run (e.g. "node").
+        - args: argv array (e.g. ["./mcp-servers/test-server.mjs"]).
+        - env: optional environment variables to pass through.
+    - tools
+      - Map of local tool name → remote mapping.
+      - Each tool mapping:
+        - server: server id from `mcp.servers`.
+        - tool: remote tool name on that server.
+
+Example:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "test": {
+        "command": "node",
+        "args": ["./mcp-servers/test-server.mjs"],
+        "env": {}
+      }
+    },
+    "tools": {
+      "echo": { "server": "test", "tool": "echo" },
+      "calc": { "server": "test", "tool": "calculator" }
+    }
+  }
+}
+```
 
 ## Model-level keys
   - An object containing one or more named models. Each key is the “model identifier” that you will pass to charmonator or your client code.
@@ -157,8 +193,9 @@ Aliases are resolved recursively, and circular references are detected and will 
       - Number in [0.0 - 2.0].
 
     - tools
-      - An array of tool names (strings) that you have declared at config.tools.
-      - The model will be able to make function calls referencing those tool names.
+      - An array of tool names (strings).
+      - Entries that match `config.tools` load server-side JS tools.
+      - If `config.mcp` is present, entries that do not match `config.tools` are treated as MCP tool names/aliases.
 
     - max_attempts
       - See top-level key max_attempts.
