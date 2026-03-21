@@ -40,6 +40,7 @@
     },
     "my-unittest-with-mcp-model": {
         "api": "OpenAI_Azure",
+        "api_key": "${AZURE_OPENAI_API_KEY}",
         "model_type": "chat",
 
          "endpoint": "https://mmigh-m8gpxf72-eastus2.cognitiveservices.azure.com",
