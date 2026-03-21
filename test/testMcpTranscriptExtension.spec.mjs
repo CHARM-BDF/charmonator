@@ -13,6 +13,7 @@ const __dirname = path.dirname(__filename);
 // Use the same port as in other tests
 const __port = 5003;
 const mymodel = 'my-unittest-model';
+const mymodel_with_mcp = 'my-unittest-with-mcp-model';
 const baseCharmonatorUrl = `http://localhost:${__port}/api/charmonator/v1`;
 
 // A unitless constant converting the expected time on a good day to
@@ -135,6 +136,59 @@ tags().describe('MCP Integration Tests', function() {
     );
 
     assert(!hasToolCall, 'Response should not include tool call not requested');
+  });
+
+  // Test the echo tool via transcript/extension endpoint
+  tags('llm').it('should call MCP echo tool via model configuration', async function() {
+    this.timeout(5000 * timeoutMargin);
+
+    const url = `${baseCharmonatorUrl}/transcript/extension`;
+    const body = {
+      model: mymodel_with_mcp,
+      system: 'You are a helpful assistant. Use the echo tool to respond to the user.',
+      temperature: 0.0,
+      transcript: {
+        messages: [
+          { role: 'user', content: 'Please use the echo tool to repeat this message: "Hello from MCP test!"' }
+        ]
+      }
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    assert(response.status >= 200 && response.status < 300, `Expected 2xx status, got ${response.status}`);
+
+    const data = await response.json();
+    console.log(JSON.stringify({data}))
+    assert(Array.isArray(data.messages), 'Response should contain messages array');
+
+    // Verify the response contains a tool call to the echo tool
+    const hasToolCall = data.messages.some(msg =>
+      msg.role === 'tool_call' &&
+      msg.content &&
+      msg.content.some(c => c.toolName === 'echo')
+    );
+
+    assert(hasToolCall, 'Response should include a call to the echo tool');
+
+    // Verify there's a tool response
+    const hasToolResponse = data.messages.some(msg =>
+      msg.role === 'tool_response' &&
+      msg.content &&
+      msg.content.some(c => c.toolName === 'echo')
+    );
+
+    assert(hasToolResponse, 'Response should include a tool response from the echo tool');
+
+    // Verify the final assistant message contains the echoed message
+    const finalMessage = data.messages.find(msg => msg.role === 'assistant');
+    assert(finalMessage, 'Response should include a final assistant message');
+    assert(finalMessage.content.includes('Hello from MCP test'),
+      'Final message should contain the echoed text');
   });
 
   // Test the calculator tool via transcript/extension endpoint
