@@ -1,0 +1,83 @@
+version: 1.0.0
+
+tool:
+  name: CHARMonizer
+  # Note: this is correct. CHARMonator and CHARMonizer share a repo
+  repo_url: https://github.com/mattmight/charmonator
+  tool_homepage: https://github.com/mattmight/charmonator
+  documentation_url: https://github.com/mattmight/charmonator/blob/main/README.md
+  tool_type: WebServiceSOAP
+
+llm:
+  usesLlm: true
+  modelsSupported:
+    - openai
+    - anthropic
+    - google-ai
+    - ollama
+  modelsRequired:
+    - openai
+    - anthropic
+    - google-ai
+    - ollama
+  bringOwnKey: true
+
+input:
+  - name: Clinical/phenotype unstructured 1
+    dataCategory: clinical-phenotype
+    dataClass: unstructured-text
+    dataType: clinical-ehr
+    format:
+      - pdf
+      - docx
+    dataStandard:
+      - PDF
+      - docx/word
+    proprietary: true
+    source:
+
+output:
+  - name: clinical/phenotype structured 1
+    dataCategory: clinical-phenotype
+    dataClass: structured
+    dataType: clinical-ehr
+    format:
+      - json
+    dataStandard:
+      - custom schema
+    proprietary: true
+    source:
+
+license:
+  license_type: MIT
+  link: https://github.com/CHARM-BDF/CHARM-README/blob/main/license.txt
+
+funding:
+  source: ARPA-H
+  agreement: Not specified
+  link: https://arpa-h.gov/
+
+domains:
+  - Healthcare data analytics
+
+credit:
+  - name: UAB Team
+    role: Developer
+    org: University of Alabama at Birmingham
+    url: https://www.uab.edu/medicine/pmi/
+
+target_users:
+  primary_user:
+    user_type: researcher
+    technical_literacy_level:
+      - advanced
+    biomedical_literacy_level:
+      - advanced
+
+maturity:
+  beginning_maturity: 1
+  current_maturity: 3
+
+media: []
+
+collaborations: []
