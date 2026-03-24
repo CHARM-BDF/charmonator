@@ -7,7 +7,7 @@
     "test": "./node_modules/.bin/mocha --tags \"not:llm\" test/**/*.spec.mjs",
     "test:all": "env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha  test/**/*.spec.mjs",
     "test:myfavorite": "node ./node_modules/mocha/bin/mocha  --grep \"list available models\"",
-    "test:ci": "env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha --reporter json --reporter-option output=test/reports/test_ci.json --tags \"not:llm\" test/**/*.spec.mjs",
+    "test:ci": "env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha --reporter json --reporter-option output=test/reports/test_ci.json test/**/*.spec.mjs",
     "postinstall": "mkdir -p test/data && touch test/data/05-versions-space.pdf  # pdf-parse workaround"
   },
   "keywords": [],
