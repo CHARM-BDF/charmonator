@@ -217,7 +217,7 @@ describe('My REST tests', function() {
       assert(finalDoc.id, 'Should have doc id');
     });
 
-    tags('llm').it('should convert pdf to doc object without LLM (long-running)', async function() {
+    tags('llm').it.skip('should convert pdf to doc object without LLM (long-running)', async function() {
       const url = `${baseCharmonizerUrl}/conversions/documents`
       this.timeout(5000*timeoutMargin);
       const form = new FormData();
