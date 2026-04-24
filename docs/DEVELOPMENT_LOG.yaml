@@ -22,3 +22,20 @@
       result: 1 test 0 failures
     - verification: npm test
       result: 19 tests 0 failures 16 pending
+- meta: {_: bug, guid: r8q2}
+  title: Schema repair test should exercise requestToRepair directly
+  prompt: |
+    The following unit test has a major defect, which is that it relies on promptHackTest in order to obtain access to requestToRepair.  Because of that, requestToRepair doesn't get tested accurately, because often the first pass promptHackTest will repair the answer before it gets a chance.
+
+    Port the test to requestToRepair.
+
+        env CHARMONATOR_CONFIG=conf/config.unittest.json node ./node_modules/mocha/bin/mocha  --grep "should repair a nonconformant answer"
+  verifications:
+    - verification: Run env CHARMONATOR_CONFIG=conf/config.unittest.json node ./node_modules/mocha/bin/mocha --grep "should repair a nonconformant answer"
+      result: 1 test 0 failures
+    - verification: Perform Test Double Check Procedure on the targeted schema repair test
+      result: injected failure observed, then 1 test 0 failures after removal
+    - verification: Run npm test
+      result: 16 tests 0 failures 19 pending
+    - verification: Run npm run lint
+      result: 1 pre-existing failure in lib/server.mjs:191 ('reject' is not defined)
