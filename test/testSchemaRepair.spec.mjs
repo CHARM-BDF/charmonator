@@ -74,17 +74,17 @@ const msTimeout = 600000 // TODO: iteration, timeoutMargin
 const dir_data = path.join(__dirname, 'data', 'extra', 'schema_repair');
 
 tags().describe('Test schema repair', function() {
-  let server;
+  let processes;
 
-  before(async function () {
-    server = await createAndStart()
-  })
+  before(async function() {
+    this.timeout(10000);
+    processes = await createAndStart();
+  });
 
   after(async function() {
-    await new Promise(resolve => {
-      server.close(resolve);
-    });
-  })
+    this.timeout(10000);
+    await processes.cleanup();
+  });
   // Create one Mocha "it" test per instance-file
   tags('llm').it(`should repair a nonconformant answer`, async function() {
     this.timeout(msTimeout); 
