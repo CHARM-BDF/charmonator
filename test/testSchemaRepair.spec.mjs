@@ -76,18 +76,8 @@ tags().describe('Test schema repair', function() {
     const pathLog = path.join(__dirname, path.basename(__filename)+".log")
     const fdLog = fs.openSync(pathLog, "w")
     const testPairs = loadSchemaInstancePairs(dir_data)
-      .map((pair) => ({
-        ...pair,
-        initialErrors: validateAgainstSchema(pair.instanceData, pair.schemaData)
-      }))
-      .filter((pair) => pair.initialErrors.length > 0);
     assert(testPairs.length > 0, `No nonconformant fixtures found in ${dir_data}`);
     const chatModel = fetchChatModel(modelForChat);
-    chatModel.system = [
-      'You repair one invalid JSON response to satisfy the requested schema.',
-      'Return only the repaired JSON instance.',
-      'Do not include schema metadata, explanations, or wrapper objects unless they are required by the schema and present in the invalid response.'
-    ].join(' ');
     chatModel.temperature = 0.0;
     let brief = []
     for (const { schemaPath, instancePath, schemaData, instanceData, initialErrors } of testPairs) {
@@ -140,7 +130,7 @@ tags().describe('Test schema repair', function() {
         schemaPath,
         instancePath,
         parsedOutput,
-        initialErrorsCount: initialErrors.length,
+        initialErrorsCount: testPairs.length,
         parseOk,
         errorsOk,
         sizeOk
