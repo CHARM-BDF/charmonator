@@ -262,6 +262,52 @@ describe('My REST tests', function() {
       assert(finalDoc.id, 'Should have doc id');
     });
 
+    tags('llm').it('should extend transcript asynchronously', async function() {
+      const url = `${baseCharmonizerUrl}/transcript/extension`;
+      this.timeout(5000*timeoutMargin);
+
+      const body = {
+        model: modelForChat,
+        system: 'Async system test.',
+        temperature: 0.0,
+        transcript: {
+          messages: [
+            { role: 'user', content: 'Hello, asynchronous transcript extension!' }
+          ]
+        }
+      };
+
+      let r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      assert(r.status === 202, 'Should accept job');
+      let data = await r.json();
+      const jobId = data.job_id;
+
+      const urlStatus = `${url}/${jobId}`;
+      const urlResult = `${url}/${jobId}/result`;
+
+      // Poll
+      while (true) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        r = await fetch(urlStatus);
+        data = await r.json();
+        if (data.status === 'error') {
+          assert.fail(`Async transcript error: ${JSON.stringify(data)}`);
+        }
+        if (data.status === 'complete') {
+          break;
+        }
+      }
+
+      const finalRes = await fetch(urlResult);
+      assert(finalRes.status >= 200 && finalRes.status < 300, 'Final result should be OK');
+      const finalData = await finalRes.json();
+      assert(Array.isArray(finalData.messages), 'Should have final transcript messages');
+    });
+
     tags('llm').it('should compute embeddings for a doc object (long-running)', async function() {
       const url = `${baseCharmonizerUrl}/embeddings`
       this.timeout(2000*timeoutMargin)
