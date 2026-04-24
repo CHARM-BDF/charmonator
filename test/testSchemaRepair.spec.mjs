@@ -66,7 +66,20 @@ function loadSchemaInstancePairs(baseDir) {
   return testCases;
 }
 
+function dupeTestCases(n, testsIn) {
+  let testsOut=[]
+  for(var i=0; i<n; i+=1) {
+    for(var test of testsIn) {
+      testsOut.push(
+        {...test}
+      )
+    }
+  }
+  return testsOut
+}
+
 const msTimeout = 600000 // TODO: iteration, timeoutMargin
+const num_reps_per_test = 1;
 const dir_data = path.join(__dirname, 'data', 'extra', 'schema_repair');
 
 tags().describe('Test schema repair', function() {
@@ -75,8 +88,9 @@ tags().describe('Test schema repair', function() {
     this.timeout(msTimeout); 
     const pathLog = path.join(__dirname, path.basename(__filename)+".log")
     const fdLog = fs.openSync(pathLog, "w")
-    const testPairs = loadSchemaInstancePairs(dir_data)
-    assert(testPairs.length > 0, `No nonconformant fixtures found in ${dir_data}`);
+    const testPairs0 = loadSchemaInstancePairs(dir_data)
+    assert(testPairs0.length > 0, `No nonconformant fixtures found in ${dir_data}`);
+    const testPairs = dupeTestCases(num_reps_per_test, testPairs0);
     const chatModel = fetchChatModel(modelForChat);
     chatModel.temperature = 0.0;
     let brief = []
