@@ -1,0 +1,11 @@
+- meta: {_: bug, guid: k4t9}
+  title: lib/server.mjs should handle listen startup errors without undefined reject
+  prompt: |
+    Resolve "npm run lint" issues.
+  verifications:
+    - verification: npm run lint
+      result: 0 errors
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha --grep "should list available models" test/testRest.spec.mjs
+      result: 1 test 0 failures
+    - verification: Test Double Check Procedure on test/testRest.spec.mjs "should list available models"
+      result: injected failure observed, probe removed, 1 test 0 failures
