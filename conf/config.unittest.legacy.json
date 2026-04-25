@@ -1,0 +1,28 @@
+{
+  "tools": {
+    "calculator": {
+      "code": "./tools/calculator.mjs",
+      "options": { "precision": 8 }
+    },
+    "web_search": {
+      "code": "./tools/web_search_tool.mjs",
+      "class": "WebSearchTool",
+      "options": { "default_api": "duckduckgo" }
+    },
+
+    "my_toolbox": {
+      "toolbox": ["calculator", "web_search"]
+    }
+  },
+
+  "models": {
+    "my-model-with-toolbox": {
+      "api": "OpenAI",
+      "model_type": "chat",
+      "model": "gpt-4o",
+      "api_key": "sk-...",
+
+      "tools": ["my_toolbox"]
+    }
+  }
+}

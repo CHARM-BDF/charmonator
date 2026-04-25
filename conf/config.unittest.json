@@ -5,6 +5,25 @@
   },
   "max_attempts": 3,
   "ms_client_request_timeout": 600001,
+  "mcp": {
+    "servers": {
+      "test": {
+        "command": "node",
+        "args": ["./mcp-servers/test-server.mjs"],
+        "env": {}
+      }
+    },
+    "tools": {
+      "echo": {
+        "server": "test",
+        "tool": "echo"
+      },
+      "calc": {
+        "server": "test",
+        "tool": "calculator"
+      }
+    }
+  },
   "models": {
     "my-unittest-model": {
         "api": "OpenAI_Azure",
@@ -18,6 +37,20 @@
         "reasoning_effort": "low",
         "context_size": 128000,
         "output_limit": 16384
+    },
+    "my-unittest-with-mcp-model": {
+        "api": "OpenAI_Azure",
+        "api_key": "${AZURE_OPENAI_API_KEY}",
+        "model_type": "chat",
+
+         "endpoint": "https://mmigh-m8gpxf72-eastus2.cognitiveservices.azure.com",
+         "deployment": "o3",
+         "api_version": "2024-12-01-preview",
+
+        "reasoning_effort": "low",
+        "context_size": 128000,
+        "output_limit": 16384,
+        "tools": ["echo"]
     },
     "my-unittest-emodel": {
       "api": "OpenAI_Azure",
