@@ -2,7 +2,7 @@ import tags from 'mocha-tags-ultra';
 import { strict as assert } from 'assert';
 import fetch from 'node-fetch';
 
-import { createAndStart } from '../lib/server.mjs';
+import { useManagedServerFixture } from './support/managed-server-fixture.mjs';
 
 // Use the same port as other tests
 const __port = 5003;
@@ -10,8 +10,6 @@ const baseCharmonatorUrl = `http://localhost:${__port}/api/charmonator/v1`;
 const timeoutMargin = 5;
 
 tags('legacy').describe('Legacy toolbox config (requests)', function() {
-  let processes;
-
   before(async function() {
     this.timeout(10000);
 
@@ -20,14 +18,9 @@ tags('legacy').describe('Legacy toolbox config (requests)', function() {
       this.skip();
       return;
     }
-
-    processes = await createAndStart();
   });
 
-  after(async function() {
-    this.timeout(10000);
-    await processes?.cleanup?.();
-  });
+  useManagedServerFixture();
 
   it('should list legacy tools on tools/list', async function() {
     const url = `${baseCharmonatorUrl}/tools/list`;
