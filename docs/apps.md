@@ -349,6 +349,47 @@ const chatModel = fetchChatModel('gpt-4o');
 const response = await chatModel.replyTo('Your prompt here');
 ```
 
+### Using Structured Output and Schema Repair
+
+App routes can reuse Charmonator's transcript-extension helper when they need a schema-conformant JSON result:
+
+```javascript
+import express from 'express';
+import { doTranscriptExtension } from '../../../lib/transcript-extension.mjs';
+
+const router = express.Router();
+
+router.post('/extract-contact-card', async (req, res) => {
+  try {
+    const result = await doTranscriptExtension({
+      model: 'gpt-4o',
+      transcript: req.body.transcript,
+      options: {
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'contact_card',
+            schema: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                email: { type: 'string' }
+              },
+              required: ['name', 'email']
+            }
+          }
+        }
+      }
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+```
+
+With `response_format.type = "json_schema"`, the helper validates the assistant JSON against the schema and will attempt repair prompts before it gives up. If you need the exact HTTP behavior of the built-in API, including the `x-num-repair-attempts` header and the 422 failure payload, proxy the core `/api/charmonator/v1/transcript/extension` endpoint instead of calling the helper directly.
+
 ### Using Tools
 
 Apps can access configured tools:

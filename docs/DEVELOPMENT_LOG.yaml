@@ -39,3 +39,19 @@
       result: 16 tests 0 failures 19 pending
     - verification: Run npm run lint
       result: 1 pre-existing failure in lib/server.mjs:191 ('reject' is not defined)
+- meta: {_: refactor, guid: d4p7}
+  title: Schema repair docs should describe validation retries and structured outputs
+  prompt: |
+    Our branch, for this range:
+        fix_promise_timeout_1..HEAD
+    implements a feature called "schema repair".  Update the following docs:
+        docs/api-docs.md  docs/apps.md  docs/configuration.md  docs/document.md
+  verifications:
+    - verification: Run npm run lint
+      result: 0 errors
+    - verification: Run npm test
+      result: 18 tests 0 failures 19 pending
+    - verification: Review git diff for docs/api-docs.md docs/apps.md docs/configuration.md docs/document.md
+      result: Updated requested docs to describe schema validation retries, configuration, and structured annotation storage
+    - verification: Search updated docs for schema-repair API and configuration terms
+      result: Confirmed references to x-num-repair-attempts, num_schema_repair_max_attempts, and structured JSON summary storage
