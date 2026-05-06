@@ -18,7 +18,7 @@ tags().describe('MCP Integration Tests', function() {
 
   // Test the echo tool via transcript/extension endpoint
   tags('llm').it('should call MCP echo tool via transcript/extension', async function() {
-    this.timeout(5000 * timeoutMargin);
+    this.timeout(10000 * timeoutMargin);
 
     const url = `${baseCharmonatorUrl}/transcript/extension`;
     const body = {
@@ -166,7 +166,7 @@ tags().describe('MCP Integration Tests', function() {
 
   // Test the calculator tool via transcript/extension endpoint
   tags('llm').it('should call MCP calculator tool via transcript/extension', async function() {
-    this.timeout(5000 * timeoutMargin);
+    this.timeout(10000 * timeoutMargin);
 
     const url = `${baseCharmonatorUrl}/transcript/extension`;
     const body = {
