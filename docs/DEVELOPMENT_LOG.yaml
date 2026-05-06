@@ -74,3 +74,13 @@
       result: injected failure observed, then 1 test 0 failures after removal
     - verification: Test Double Check Procedure on test/testRest.spec.mjs "should summarize a doc object into structured json"
       result: injected failure observed, then 1 test 0 failures after removal
+- meta: {_: refactor, guid: q1m7}
+  title: Summary schema repair docs should describe summaries endpoint behavior
+  prompt: |
+    To reflect /summarize being able to use schema repair, update the following docs:
+        docs/api-docs.md  docs/apps.md  docs/configuration.md  docs/document.md
+  verifications:
+    - verification: Review git diff for docs/api-docs.md docs/apps.md docs/configuration.md docs/document.md
+      result: Updated requested docs to describe schema repair for /summaries, request parameters, configuration scope, and stored document annotations
+    - verification: Search updated docs for /summaries and num_schema_repair_max_attempts references
+      result: Confirmed summaries schema-repair behavior is documented in API, apps, configuration, and document references

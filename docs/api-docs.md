@@ -744,7 +744,7 @@ POST api/charmonizer/v1/summaries
   - `"left-to-right"` (default) – merges summaries in a simple linear pass  
   - `"hierarchical"` – merges summaries in pairs (like merge-sort), potentially producing more balanced merges
 
-- **JSON-Structured Summaries**: Optionally specify `json_schema` to request a structured JSON summary instead of plain text. When parsing succeeds, the stored annotation may be an object or array rather than a string.
+- **JSON-Structured Summaries**: Optionally specify `json_schema` to request a structured JSON summary instead of plain text. The summaries route now uses the same schema-repair approach as transcript extension: it validates structured replies against the requested schema and may issue repair prompts before giving up. When parsing succeeds, the stored annotation may be an object or array rather than a string.
 
 #### Request Body
 
@@ -814,7 +814,8 @@ POST api/charmonizer/v1/summaries
 - **`model`**: LLM to use.  
 - **`guidance`**: Additional user instructions for summarizing.  
 - **`temperature`**: LLM sampling temperature (float).  
-- **`json_schema`**: If given, output is requested as structured JSON matching that schema. When parsing succeeds, the stored annotation may be an object or array instead of prose text.  
+- **`json_schema`**: If given, output is requested as structured JSON matching that schema. The route validates the reply against that schema and may retry with schema-repair prompts before failing. When parsing succeeds, the stored annotation may be an object or array instead of prose text.  
+- **`num_schema_repair_max_attempts`**: (number, optional) Overrides the configured maximum number of schema-repair follow-up attempts for this summarization job.  
 - **`json_sum`**: For `"delta-fold"`, how new deltas combine with the existing summary (usually `"append"`).  
 - **`initial_summary`**: For `"fold"` / `"delta-fold"`, seeds the accumulation.  
 - **`annotation_field`**: The doc-level or chunk-level annotations key where the summary is stored (default: `"summary"`).  
@@ -852,7 +853,7 @@ GET api/charmonizer/v1/summaries/{job_id}
 GET api/charmonizer/v1/summaries/{job_id}/result
 ```
 - If still `pending`/`processing`: HTTP 202 + partial status  
-- If `error`: HTTP 500 + error message  
+- If `error`: HTTP 500 + error message. This includes cases where a `json_schema` summary still could not be validated after the repair loop.  
 - If `complete`: returns the final doc object with the summary stored in the annotation fields specified.
 
 **Example** final doc object:
@@ -877,7 +878,7 @@ GET api/charmonizer/v1/summaries/{job_id}/result
   }
 }
 ```
-*(If you requested a `json_schema`, then the `summary` might be structured JSON rather than a string. If method = `delta-fold`, then `annotations.summary` could be an **array** of deltas, and each chunk’s partial summary is in `annotations.summary_delta`. For `map-merge`, the final top-level summary is stored in `annotations.summary`, while each chunk also has a partial summary. For `merge`, chunk summaries must already exist, and the endpoint simply merges them into a single doc-level summary, optionally controlled by `merge_mode`.)*
+*(If you requested a `json_schema`, then the `summary` might be structured JSON rather than a string. The route validates that structured reply and may repair it before the job completes; if repair still fails, the job ends in `error` instead of storing malformed output. If method = `delta-fold`, then `annotations.summary` could be an **array** of deltas, and each chunk’s partial summary is in `annotations.summary_delta`. For `map-merge`, the final top-level summary is stored in `annotations.summary`, while each chunk also has a partial summary. For `merge`, chunk summaries must already exist, and the endpoint simply merges them into a single doc-level summary, optionally controlled by `merge_mode`.)*
 
 ---
 
