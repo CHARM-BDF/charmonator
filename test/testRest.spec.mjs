@@ -267,6 +267,44 @@ describe('My REST tests', function() {
       assert(finalDoc.id, 'Should have doc id');
     });
 
+    tags('llm').it('should summarize a doc object into structured json', async function() {
+      const url = `${baseCharmonizerUrl}/summaries`
+      this.timeout(4000*timeoutMargin);
+      const minimalDoc = {
+        id: 'test-doc-structured-1',
+        content: 'Alpha has headaches and fatigue. Beta has no symptoms.'
+      };
+      const body = {
+        document: minimalDoc,
+        model: modelForChat,
+        method: 'full',
+        guidance: 'Summarize only Alpha in one sentence.',
+        temperature: 0.1,
+        json_schema: {
+          type: 'object',
+          properties: {
+            summary: { type: 'string' }
+          },
+          required: ['summary'],
+          additionalProperties: false
+        }
+      };
+      let r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      assert(r.status >= 200 && r.status < 300);
+      const data = await r.json();
+      const jobId = data.job_id;
+      const urlStatus = `${url}/${jobId}`;
+      const urlResult = `${url}/${jobId}/result`;
+      const [finalDoc, finalRes] = await pollForComplete(urlStatus, urlResult);
+      assert(finalRes.status >= 200 && finalRes.status < 300);
+      assert.equal(typeof finalDoc.annotations?.summary?.summary, 'string');
+      assert(finalDoc.annotations.summary.summary.length > 0, 'Structured summary should not be empty');
+    });
+
     tags('llm').it('should extend transcript asynchronously', async function() {
       const url = `${baseCharmonizerUrl}/transcript/extension`;
       this.timeout(5000*timeoutMargin);

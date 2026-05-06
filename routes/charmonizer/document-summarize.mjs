@@ -6,11 +6,14 @@ import { fetchChatModel } from '../../lib/core.mjs';
 import { JSONDocument, tokenCount } from '../../lib/json-document.mjs';
 import { jsonSafeFromException, ProviderException } from '../../lib/providers/provider_exception.mjs';
 import { getConfig } from '../../lib/config.mjs';
+import { Message, TranscriptFragment } from '../../lib/transcript.mjs';
+import { requestToRepair, validateAgainstSchema } from '../../lib/schema-validation.mjs';
 
 /**
  * We'll store summarization jobs in memory. For production, use a DB or persistent store.
  */
 const jobs = {};
+const numSchemaRepairMaxAttemptsDefault = 5;
 
 /**
  * Budget helper functions for token/word conversions
@@ -159,7 +162,8 @@ function createJobRecord(docObject, params) {
     ...params.options,
     ms_client_request_timeout: params.ms_client_request_timeout,
     num_client_request_max_attempts: params.num_client_request_max_attempts,
-    num_defective_reply_max_attempts: params.num_defective_reply_max_attempts
+    num_defective_reply_max_attempts: params.num_defective_reply_max_attempts,
+    num_schema_repair_max_attempts: params.num_schema_repair_max_attempts
   }
   jobs[jobId] = {
     id: jobId,
@@ -286,6 +290,68 @@ function parseLLMReply(rawText, job) {
   }
 }
 
+export function buildStructuredOutputOptions(job, options = {}) {
+  if (!job.jsonSchema) {
+    return { ...options };
+  }
+
+  return {
+    ...options,
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'forced-schema',
+        schema: job.jsonSchema
+      }
+    }
+  };
+}
+
+function resolveSchemaRepairAttemptCount(options = {}) {
+  const value = Number(
+    options.num_attempts_to_correct_schema
+      ?? options.num_schema_repair_max_attempts
+      ?? numSchemaRepairMaxAttemptsDefault
+  );
+
+  if (!Number.isFinite(value) || value < 0) {
+    return numSchemaRepairMaxAttemptsDefault;
+  }
+
+  return Math.floor(value);
+}
+
+function validateStructuredReply(rawText, schema) {
+  const cleaned = String(rawText ?? '').trim()
+    .replace(/^```[a-zA-Z]*\s*/, '')
+    .replace(/```$/, '')
+    .trim();
+
+  try {
+    const parsed = JSON.parse(cleaned);
+    const validationErrors = validateAgainstSchema(parsed, schema);
+    return {
+      parsed,
+      validationErrors,
+      isValid: validationErrors.length === 0
+    };
+  } catch (err) {
+    return {
+      parsed: null,
+      validationErrors: [
+        {
+          keyword: 'parse',
+          instancePath: '',
+          schemaPath: '',
+          params: {},
+          message: err.message
+        }
+      ],
+      isValid: false
+    };
+  }
+}
+
 /**
  * Summarize the entire doc with one LLM call, store in top-level doc.annotations.
  */
@@ -307,10 +373,7 @@ async function runFullSummarization(job, topDoc) {
     }
   ];
 
-  // ADJUST so we wrap job.jsonSchema with type: 'json_schema'
-  const options = job.jsonSchema
-    ? {...job.options, response_format: { type: 'json_schema', json_schema: { name: 'forced-schema', schema: job.jsonSchema } } }
-    : {...job.options};
+  const options = buildStructuredOutputOptions(job, job.options);
 
   const assistantReply = await callLLM(chatModel, transcript, options);
   const finalData = parseLLMReply(assistantReply, job);
@@ -386,7 +449,7 @@ async function runMapSummarization(job, topDoc) {
     }
 
     // Apply budget tracking constraints if budget is set
-    let options = {};
+    let options = buildStructuredOutputOptions(job, job.options);
     let numTokensTarget = null;
     let numWordsTarget = null;
     if (budgetRemainingTokens != null && chunksRemaining > 0) {
@@ -401,7 +464,7 @@ async function runMapSummarization(job, topDoc) {
       { role: 'user', content: userContent }
     ];
 
-    const assistantReply = await callLLM(chatModel, transcript, job.options);
+    const assistantReply = await callLLM(chatModel, transcript, options);
     const finalData = parseLLMReply(assistantReply, job);
 
     // Update budget tracking if budget is set
@@ -504,7 +567,7 @@ async function runFoldSummarization(job, topDoc) {
       { role: 'user', content: userContent }
     ];
 
-    const llmReply = await callLLM(chatModel, transcript, job.options);
+    const llmReply = await callLLM(chatModel, transcript, buildStructuredOutputOptions(job, job.options));
     const finalObj = parseLLMReply(llmReply, job);
     accumulatedSummary = finalObj;
 
@@ -616,7 +679,7 @@ async function runDeltaFoldSummarization(job, topDoc) {
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent }
     ];
-    const llmReply = await callLLM(chatModel, transcript, job.options);
+    const llmReply = await callLLM(chatModel, transcript, buildStructuredOutputOptions(job, job.options));
 
     const newDelta = parseLLMReply(llmReply, job);
 
@@ -729,7 +792,7 @@ async function runMapMergeSummarization(job, topDoc) {
       { role: 'user', content: userContent }
     ];
 
-    const assistantReply = await callLLM(chatModel, transcript, job.options);
+    const assistantReply = await callLLM(chatModel, transcript, buildStructuredOutputOptions(job, job.options));
     const partialSummary = parseLLMReply(assistantReply, job);
 
     ensureAnnotations(thisChunkDoc._doc);
@@ -839,7 +902,7 @@ Please produce a single merged summary:
     { role: 'user', content: userContent }
   ];
 
-  const assistantReply = await callLLM(chatModel, transcript, job.options);
+  const assistantReply = await callLLM(chatModel, transcript, buildStructuredOutputOptions(job, job.options));
   const merged = parseLLMReply(assistantReply, job);
 
   return merged;
@@ -863,24 +926,55 @@ function makeChatModel(modelName, systemText, temperature) {
  * Changed to accept an optional `options` object, 
  * which we pass as the fourth argument to `extendTranscript`.
  */
-async function callLLM(chatModel, minimalTranscript, options = {}) {
+export async function callLLM(chatModel, minimalTranscript, options = {}) {
   console.log("minimalTranscript:", minimalTranscript);
-  let nAttemptsLeft = 1 + options.num_defective_reply_max_attempts;
-  while (nAttemptsLeft>=0) {
-    nAttemptsLeft = nAttemptsLeft-1;
-    const prefixFrag = {
-      messages: minimalTranscript.map(m => ({ role: m.role, content: m.content }))
-    };
+  const schema = options?.response_format?.json_schema?.schema || null;
+  let prefixFrag = new TranscriptFragment(
+    minimalTranscript.map(m => new Message(m.role, m.content))
+  );
+  let repairAttemptsLeft = schema ? resolveSchemaRepairAttemptCount(options) : 0;
 
-    const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
-    const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
-    if (!lastMsg || !lastMsg.content || lastMsg.content.length===0) {
-      console.log({event:'Defective reply from from LLM, retrying', nAttemptsLeft});
-    } else {
+  while (true) {
+    let nAttemptsLeft = 1 + options.num_defective_reply_max_attempts;
+    let attemptedRepair = false;
+    while (nAttemptsLeft>=0) {
+      nAttemptsLeft = nAttemptsLeft-1;
+      const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
+      const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
+      if (!lastMsg || !lastMsg.content || lastMsg.content.length===0) {
+        console.log({event:'Defective reply from from LLM, retrying', nAttemptsLeft});
+        continue;
+      }
       if(lastMsg.role !== 'assistant') {
         console.log({event:"Warning: last reply from the LLM isn't?"});
       }
-      return lastMsg.content;
+
+      if (!schema) {
+        return lastMsg.content;
+      }
+
+      const { isValid, validationErrors } = validateStructuredReply(lastMsg.content, schema);
+      if (isValid) {
+        return lastMsg.content;
+      }
+      if (repairAttemptsLeft <= 0) {
+        throw new Error('The response could not be validated after multiple attempts.');
+      }
+
+      const invalidSuffix = new TranscriptFragment([
+        new Message('assistant', lastMsg.content)
+      ]);
+      const repairPrompt = requestToRepair(invalidSuffix, validationErrors);
+      prefixFrag = prefixFrag
+        .plus(new Message('assistant', lastMsg.content))
+        .plus(new Message('user', repairPrompt));
+      repairAttemptsLeft -= 1;
+      attemptedRepair = true;
+      break;
+    }
+
+    if (!attemptedRepair) {
+      break;
     }
   }
   // Technically not a provider-specific exception, but this is the best way we have set up to communicate
@@ -940,6 +1034,7 @@ router.post('/', async (req, res) => {
       ms_client_request_timeout = null,
       num_client_request_max_attempts = null,
       num_defective_reply_max_attempts = getConfig().num_defective_reply_max_attempts,
+      num_schema_repair_max_attempts = null,
 
       merge_summaries_guidance,
       merge_mode,
@@ -980,6 +1075,7 @@ router.post('/', async (req, res) => {
       ms_client_request_timeout,
       num_client_request_max_attempts,
       num_defective_reply_max_attempts,
+      num_schema_repair_max_attempts,
 
       merge_summaries_guidance: merge_summaries_guidance || '',
       merge_mode: merge_mode || 'left-to-right',
