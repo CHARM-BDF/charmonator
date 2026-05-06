@@ -9,3 +9,16 @@
       result: 1 test 0 failures
     - verification: Test Double Check Procedure on test/testRest.spec.mjs "should list available models"
       result: injected failure observed, probe removed, 1 test 0 failures
+- meta: {_: bug, guid: n2f6}
+  title: MCP test fixtures should abort timed-out background server work during teardown
+  prompt: |
+    Resolve git cherry-pick 83dd63f
+  verifications:
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha test/testServerCleanup.spec.mjs
+      result: 1 test 0 failures
+    - verification: Test Double Check Procedure on test/testServerCleanup.spec.mjs "should force close active HTTP connections during cleanup"
+      result: injected failure observed, probe removed, 1 test 0 failures
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha test/testManagedServerFixture.spec.mjs
+      result: 1 test 0 failures
+    - verification: npm test
+      result: 19 tests 0 failures 16 pending

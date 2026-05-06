@@ -15,6 +15,16 @@ router.post('/extension', async (req, res) => {
     "url":"/transcript/extension"+req.url,
     "body":req.body}))
   let transcriptCopy = null;
+  const abortController = new globalThis.AbortController();
+  const onDisconnect = () => {
+    if (!abortController.signal.aborted && !res.writableEnded) {
+      abortController.abort(new Error('Client disconnected'));
+      console.log('[transcript-extension] Client disconnected; aborting request work');
+    }
+  };
+
+  req.once('aborted', onDisconnect);
+  res.once('close', onDisconnect);
   try {
     const {
       model: modelId,
@@ -102,7 +112,8 @@ router.post('/extension', async (req, res) => {
     const invocationOptions = {
       ...options2,
       ms_client_request_timeout,
-      max_attempts
+      max_attempts,
+      abort_signal: abortController.signal
     }
 
     // Generate response
@@ -114,15 +125,24 @@ router.post('/extension', async (req, res) => {
     );
 
     // Return the suffix as JSON
+    if (abortController.signal.aborted || res.destroyed) {
+      return;
+    }
     return res.json(suffix.toJSON());
 
   } catch (err) {
+    if (abortController.signal.aborted) {
+      return;
+    }
     const j = jsonSafeFromException(err)
     console.error({"event":"Error extending transcript",
       stack: err.stack,
       errJson: j
     })
     return res.status(500).json(j);
+  } finally {
+    req.off('aborted', onDisconnect);
+    res.off('close', onDisconnect);
   }
 });
 
