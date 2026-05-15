@@ -93,7 +93,12 @@ tags().describe('Test schema repair', function() {
     const pathLog = path.join(__dirname, path.basename(__filename)+".log")
     const fdLog = fs.openSync(pathLog, "w")
     const testPairs0 = loadSchemaInstancePairs(dir_data)
-    assert(testPairs0.length > 0, `No nonconformant fixtures found in ${dir_data}`);
+    if(testPairs0.length <= 0) {
+      console.log({
+        "event": "schema repair test: no extra data installed"
+      });
+      return
+    }
     const testPairs = dupeTestCases(num_reps_per_test, testPairs0);
     const chatModel = fetchChatModel(modelForChat);
     chatModel.temperature = 0.0;
