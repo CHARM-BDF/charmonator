@@ -30,8 +30,12 @@ function getSubdirectories(dir) {
  * Load (schema, instance) pairs from each subdirectory under the given baseDir.
  * Each subdirectory must have one file named schema.json and one or more
  * instance files (e.g., *.json) that are not named schema.json.
+ * Because the extra repository is optional, a nonexistent directory results in the empty list.
  */
 function loadSchemaInstancePairs(baseDir) {
+  if (!fs.existsSync(baseDir)) {
+    return [];
+  }
   const subdirs = getSubdirectories(baseDir);
   const testCases = [];
 
