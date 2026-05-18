@@ -308,17 +308,8 @@ export function buildStructuredOutputOptions(job, options = {}) {
 }
 
 function resolveSchemaRepairAttemptCount(options = {}) {
-  const value = Number(
-    options.num_attempts_to_correct_schema
-      ?? options.num_schema_repair_max_attempts
-      ?? numSchemaRepairMaxAttemptsDefault
-  );
-
-  if (!Number.isFinite(value) || value < 0) {
-    return numSchemaRepairMaxAttemptsDefault;
-  }
-
-  return Math.floor(value);
+  const config = getConfig()
+  return options.num_schema_repair_max_attempts ?? config.num_schema_repair_max_attempts
 }
 
 function validateStructuredReply(rawText, schema) {
