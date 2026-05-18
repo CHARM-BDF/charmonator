@@ -13,7 +13,6 @@ import { requestToRepair, validateAgainstSchema } from '../../lib/schema-validat
  * We'll store summarization jobs in memory. For production, use a DB or persistent store.
  */
 const jobs = {};
-const numSchemaRepairMaxAttemptsDefault = 5;
 
 /**
  * Budget helper functions for token/word conversions
