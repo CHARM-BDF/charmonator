@@ -84,3 +84,19 @@
       result: Updated requested docs to describe schema repair for /summaries, request parameters, configuration scope, and stored document annotations
     - verification: Search updated docs for /summaries and num_schema_repair_max_attempts references
       result: Confirmed summaries schema-repair behavior is documented in API, apps, configuration, and document references
+- meta: {_: bug, guid: h6w1}
+  title: Transcript extension should honor schema repair retry settings without throwing
+  prompt: |
+    Fix the tests:
+        npm run test:all
+  verifications:
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha test/testMcpTranscriptExtension.spec.mjs
+      result: 6 tests 0 failures
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha test/testClientMcpTranscriptExtension.spec.mjs
+      result: 1 test 0 failures
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha --grep "should extend transcript" test/testRest.spec.mjs
+      result: 2 tests 0 failures
+    - verification: Test Double Check Procedure on test/testRest.spec.mjs "should extend transcript"
+      result: injected failure observed, probe removed, 2 tests 0 failures
+    - verification: npm run test:all
+      result: 35 tests 0 failures 5 pending
