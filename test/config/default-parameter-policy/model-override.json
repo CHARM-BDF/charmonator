@@ -1,0 +1,23 @@
+{
+  "server": {
+    "baseUrl": "",
+    "port": 5105
+  },
+  "models": {
+    "policy-model-specific": {
+      "api": "TestPolicy",
+      "model_type": "chat",
+      "ms_client_request_timeout": 610001,
+      "test_policy_properties": [
+        "ms_client_request_timeout"
+      ]
+    },
+    "policy-global": {
+      "api": "TestPolicy",
+      "model_type": "chat",
+      "test_policy_properties": [
+        "ms_client_request_timeout"
+      ]
+    }
+  }
+}
