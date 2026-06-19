@@ -40,3 +40,18 @@
       result: 0 tests 9 failures
     - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs after removing sentinel
       result: 9 tests 0 failures
+- meta: {_: refactor, guid: k2m7}
+  title: Generate default parameter policy scenario configs during test execution
+  prompt: |
+    Refactor
+        test/testDefaultParameterPolicy.spec.mjs
+    so that
+        test/config/default-parameter-policy/*
+    are automatically generated.
+  verifications:
+    - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs
+      result: 9 tests 0 failures
+    - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs with temporary sentinel throw in parseResolvedValues
+      result: 0 tests 9 failures
+    - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs after removing sentinel
+      result: 9 tests 0 failures

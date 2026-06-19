@@ -1,4 +1,5 @@
 import { strict as assert } from 'assert';
+import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
@@ -7,6 +8,7 @@ import fetch from 'node-fetch';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
+const generatedConfigDir = path.join(repoRoot, 'test', 'config', 'default-parameter-policy', 'generated');
 
 const POLICY_PROPERTIES = [
   {
@@ -21,15 +23,15 @@ const POLICY_PROPERTIES = [
 
 const CONFIG_CASES = {
   noOverrides: {
-    path: path.join(repoRoot, 'test', 'config', 'default-parameter-policy', 'no-overrides.json'),
+    fileName: 'no-overrides.json',
     port: 5103
   },
   globalOverride: {
-    path: path.join(repoRoot, 'test', 'config', 'default-parameter-policy', 'global-override.json'),
+    fileName: 'global-override.json',
     port: 5104
   },
   modelOverride: {
-    path: path.join(repoRoot, 'test', 'config', 'default-parameter-policy', 'model-override.json'),
+    fileName: 'model-override.json',
     port: 5105
   }
 };
@@ -38,6 +40,66 @@ const MODELS = {
   modelSpecific: 'policy-model-specific',
   global: 'policy-global'
 };
+
+function buildModelConfig(overrides = {}) {
+  const modelConfig = {
+    api: 'TestPolicy',
+    model_type: 'chat',
+    test_policy_properties: POLICY_PROPERTIES.map(item => item.name)
+  };
+
+  for (const [propertyName, overrideValue] of Object.entries(overrides)) {
+    if (overrideValue !== undefined) {
+      modelConfig[propertyName] = overrideValue;
+    }
+  }
+
+  return modelConfig;
+}
+
+function buildScenarioConfig(configCaseName) {
+  const configCase = CONFIG_CASES[configCaseName];
+  const globalOverrides = {};
+  const modelSpecificOverrides = {};
+
+  if (configCaseName === 'globalOverride') {
+    for (const property of POLICY_PROPERTIES) {
+      globalOverrides[property.name] = property.globalOverrideValue;
+    }
+  }
+
+  if (configCaseName === 'modelOverride') {
+    for (const property of POLICY_PROPERTIES) {
+      modelSpecificOverrides[property.name] = property.modelOverrideValue;
+    }
+  }
+
+  const config = {
+    server: {
+      baseUrl: '',
+      port: configCase.port
+    },
+    ...globalOverrides,
+    models: {
+      [MODELS.modelSpecific]: buildModelConfig(modelSpecificOverrides),
+      [MODELS.global]: buildModelConfig()
+    }
+  };
+
+  return config;
+}
+
+async function writeGeneratedConfigFiles() {
+  await fs.rm(generatedConfigDir, { recursive: true, force: true });
+  await fs.mkdir(generatedConfigDir, { recursive: true });
+
+  for (const configCaseName of Object.keys(CONFIG_CASES)) {
+    const configCase = CONFIG_CASES[configCaseName];
+    configCase.path = path.join(generatedConfigDir, configCase.fileName);
+    const config = buildScenarioConfig(configCaseName);
+    await fs.writeFile(configCase.path, `${JSON.stringify(config, null, 2)}\n`);
+  }
+}
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -152,6 +214,14 @@ async function fetchResolvedValues({ configCase, model, requestOverrides }) {
 
 describe('Default Parameter Policy', function() {
   this.timeout(20000);
+
+  before(async function() {
+    await writeGeneratedConfigFiles();
+  });
+
+  after(async function() {
+    await fs.rm(generatedConfigDir, { recursive: true, force: true });
+  });
 
   for (const property of POLICY_PROPERTIES) {
     describe(property.name, function() {
