@@ -106,3 +106,121 @@
       result: 36 tests 36 failures
     - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs after removing sentinel
       result: 36 tests 0 failures
+- meta: {_: bug, guid: z4k8}
+  title: Request handlers should preserve model-specific default parameter policy overrides
+  prompt: |
+    Diagnose and fix: time env CHARMONATOR_CONFIG=conf/config.unittest.json node ./node_modules/mocha/bin/mocha test/testDefaultParameterPolicy.spec.mjs 
+    (node:828996) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+
+      Default Parameter Policy
+        POST transcript/extension
+          num_schema_repair_max_attempts
+            model-specific config
+              ✔ uses the populateConfigDefaults value with no overrides (748ms)
+              1) uses the model-specific config override
+              ✔ uses the request override (762ms)
+              ✔ prefers the request override over the model-specific config override (663ms)
+            global config
+              ✔ uses the populateConfigDefaults value with no overrides (768ms)
+              ✔ uses the global config override (639ms)
+              ✔ ignores model-specific config from another model (845ms)
+              ✔ uses the request override (746ms)
+              ✔ prefers the request override over the global config override (742ms)
+          num_defective_reply_max_attempts
+            model-specific config
+              ✔ uses the populateConfigDefaults value with no overrides (733ms)
+              ✔ uses the model-specific config override (762ms)
+              2) uses the request override
+              3) prefers the request override over the model-specific config override
+            global config
+              ✔ uses the populateConfigDefaults value with no overrides (783ms)
+              ✔ uses the global config override (656ms)
+              ✔ ignores model-specific config from another model (846ms)
+              4) uses the request override
+              5) prefers the request override over the global config override
+          num_client_request_max_attempts
+            model-specific config
+              ✔ uses the populateConfigDefaults value with no overrides (735ms)
+              ✔ uses the model-specific config override (630ms)
+              ✔ uses the request override (847ms)
+              ✔ prefers the request override over the model-specific config override (631ms)
+            global config
+              ✔ uses the populateConfigDefaults value with no overrides (642ms)
+              ✔ uses the global config override (655ms)
+              ✔ ignores model-specific config from another model (735ms)
+              ✔ uses the request override (765ms)
+              ✔ prefers the request override over the global config override (746ms)
+          ms_client_request_timeout
+            model-specific config
+              ✔ uses the populateConfigDefaults value with no overrides (767ms)
+              ✔ uses the model-specific config override (735ms)
+              ✔ uses the request override (634ms)
+              ✔ prefers the request override over the model-specific config override (675ms)
+            global config
+              ✔ uses the populateConfigDefaults value with no overrides (766ms)
+              ✔ uses the global config override (739ms)
+              ✔ ignores model-specific config from another model (562ms)
+              ✔ uses the request override (844ms)
+              ✔ prefers the request override over the global config override (648ms)
+        POST summaries
+          num_schema_repair_max_attempts
+            model-specific config
+              ✔ uses the populateConfigDefaults value with no overrides (641ms)
+              ✔ uses the model-specific config override (747ms)
+              ✔ uses the request override (654ms)
+              ✔ prefers the request override over the model-specific config override (788ms)
+            global config
+              ✔ uses the populateConfigDefaults value with no overrides (663ms)
+              ✔ uses the global config override (680ms)
+              ✔ ignores model-specific config from another model (745ms)
+              ✔ uses the request override (766ms)
+              ✔ prefers the request override over the global config override (639ms)
+          num_defective_reply_max_attempts
+            model-specific config
+              ✔ uses the populateConfigDefaults value with no overrides (764ms)
+              6) uses the model-specific config override
+              ✔ uses the request override (697ms)
+              ✔ prefers the request override over the model-specific config override (635ms)
+            global config
+              ✔ uses the populateConfigDefaults value with no overrides (641ms)
+              ✔ uses the global config override (575ms)
+              ✔ ignores model-specific config from another model (751ms)
+              ✔ uses the request override (671ms)
+              ✔ prefers the request override over the global config override (578ms)
+          num_client_request_max_attempts
+            model-specific config
+              ✔ uses the populateConfigDefaults value with no overrides (676ms)
+              ✔ uses the model-specific config override (846ms)
+              ✔ uses the request override (746ms)
+              ✔ prefers the request override over the model-specific config override (635ms)
+            global config
+              ✔ uses the populateConfigDefaults value with no overrides (559ms)
+              ✔ uses the global config override (631ms)
+              ✔ ignores model-specific config from another model (747ms)
+              ✔ uses the request override (634ms)
+              ✔ prefers the request override over the global config override (644ms)
+          ms_client_request_timeout
+            model-specific config
+              ✔ uses the populateConfigDefaults value with no overrides (641ms)
+              ✔ uses the model-specific config override (639ms)
+              ✔ uses the request override (763ms)
+              ✔ prefers the request override over the model-specific config override (569ms)
+            global config
+              ✔ uses the populateConfigDefaults value with no overrides (635ms)
+              ✔ uses the global config override (638ms)
+              ✔ ignores model-specific config from another model (746ms)
+              ✔ uses the request override (634ms)
+              ✔ prefers the request override over the global config override (662ms)
+
+
+      66 passing (50s)
+      6 failing
+  verifications:
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json node ./node_modules/mocha/bin/mocha test/testDefaultParameterPolicy.spec.mjs
+      result: 72 tests 0 failures
+    - verification: env TEST_DOUBLE_CHECK_THROW=1 CHARMONATOR_CONFIG=conf/config.unittest.json node ./node_modules/mocha/bin/mocha test/testDefaultParameterPolicy.spec.mjs with temporary sentinel throw in fetchResolvedValues
+      result: 0 tests 72 failures
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json node ./node_modules/mocha/bin/mocha test/testDefaultParameterPolicy.spec.mjs after removing sentinel
+      result: 72 tests 0 failures
