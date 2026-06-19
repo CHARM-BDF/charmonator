@@ -1,0 +1,42 @@
+- meta: {_: feature, guid: p7d2}
+  title: Add end-to-end default parameter policy transcript-extension coverage
+  prompt: |
+    Write me a Mocha spec file that tests end-to-end default parameter policy.
+
+    Use env CHARMONATOR_CONFIG based config overrides, not setConfig.  Generate a suitible set of config files to test the relevant possibilities.
+
+    Create a test-only provider so that the request-level parameters can also be tested without sending reqests to real downstream services or initializing providers for real LLMs.  However, wire the test-only provider into fetchProviderConstructor like a real provider would be.  Expose only the final effective request value after all policy resolution.
+
+    Take transcript/extension route to be the representative request for the spec file.
+
+    To the extent reasonably possible, make the list of properties tested configurable.  Start with exactly one property:
+        ms_client_request_timeout
+
+    If the behaviors are not currently true, do not fix them.  Just let the tests fail.
+
+    model-specific config:
+        With no overrides => should get the populateConfigDefaults value
+        With model-specific override in config file => should get the override
+        With request override => should get the override
+        With model-specific override in config file and request override => should get the request override
+
+    global (not model specific) config:
+        With no overrides => should get the populateConfigDefaults value
+        With global override in config file => should get the override
+        With model-specifc override in config file => should get the populateConfigDefaults value
+        With request override => should get the override
+        With global override in config file and request override => should get the request override
+
+    1) Since lib/config.mjs:125 caches config process-wide and lib/server.mjs:61 reads it once
+    at startup, do you want scenario isolation via separate Node processes, or is a small
+    test-only config-reset hook acceptable so one Mocha file can switch CHARMONATOR_CONFIG
+    between cases?
+
+    => Restart process.  Test spec should be immutable.
+  verifications:
+    - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs
+      result: 9 tests 0 failures
+    - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs with temporary sentinel throw in parseResolvedValues
+      result: 0 tests 9 failures
+    - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs after removing sentinel
+      result: 9 tests 0 failures
