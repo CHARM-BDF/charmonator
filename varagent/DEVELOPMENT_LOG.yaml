@@ -55,3 +55,32 @@
       result: 0 tests 9 failures
     - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs after removing sentinel
       result: 9 tests 0 failures
+- meta: {_: feature, guid: m4s1}
+  title: Expand default parameter policy coverage by endpoint assignment
+  prompt: |
+    Improve test/testDefaultParameterPolicy.spec.mjs so that it allows endpoints to be assigned properties.
+
+    ENDPOINTS=[
+      {'method':'GET'
+       'url':'transcript/extension',
+       'properties': [
+        'ms_client_request_timeout'  // refers to POLICY_PROPERTIES.name
+       ],
+      {'method':'POST'
+       'url':'summaries',
+       'properties': [
+        'ms_client_request_timeout'  // refers to POLICY_PROPERTIES.name
+       ]
+       }
+    ]
+
+    Matching the existing routes, add these methods test provider:
+        /summaries
+        /conversion/image
+  verifications:
+    - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs
+      result: 18 tests 0 failures
+    - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs with temporary sentinel throw in fetchResolvedValues
+      result: 0 tests 18 failures
+    - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs after removing sentinel
+      result: 18 tests 0 failures

@@ -9,6 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 const generatedConfigDir = path.join(repoRoot, 'test', 'config', 'default-parameter-policy', 'generated');
+const TEST_IMAGE_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z0ioAAAAASUVORK5CYII=';
 
 const POLICY_PROPERTIES = [
   {
@@ -18,6 +19,103 @@ const POLICY_PROPERTIES = [
     modelOverrideValue: 610001,
     globalOverrideValue: 620001,
     requestOverrideValue: 630001
+  }
+];
+
+const PROPERTY_MAP = new Map(POLICY_PROPERTIES.map(property => [property.name, property]));
+
+const ENDPOINTS = [
+  {
+    id: 'transcript-extension',
+    method: 'POST',
+    url: 'transcript/extension',
+    apiPrefix: 'charmonator',
+    responseMode: 'transcript/extension',
+    properties: [
+      'ms_client_request_timeout'
+    ],
+    buildRequest(model, requestOverrides) {
+      return {
+        model,
+        transcript: {
+          messages: [
+            { role: 'user', content: 'Report the resolved default-parameter policy values for this request.' }
+          ]
+        },
+        ...requestOverrides
+      };
+    },
+    async fetchResolvedValues(server, model, requestOverrides) {
+      const responseJson = await fetchJson({
+        method: this.method,
+        url: buildEndpointUrl(server.port, this),
+        body: this.buildRequest(model, requestOverrides)
+      });
+      return parseAssistantJsonValues(responseJson);
+    }
+  },
+  {
+    id: 'summaries',
+    method: 'POST',
+    url: 'summaries',
+    apiPrefix: 'charmonizer',
+    responseMode: 'summaries',
+    properties: [
+      'ms_client_request_timeout'
+    ],
+    buildRequest(model, requestOverrides) {
+      return {
+        document: {
+          id: 'policy-doc',
+          content: 'A short document for summarization policy testing.'
+        },
+        method: 'full',
+        model,
+        guidance: 'Return the resolved policy payload.',
+        annotation_field: 'policy_summary',
+        ...requestOverrides
+      };
+    },
+    async fetchResolvedValues(server, model, requestOverrides) {
+      const submitResponse = await fetchJson({
+        method: this.method,
+        url: buildEndpointUrl(server.port, this),
+        body: this.buildRequest(model, requestOverrides),
+        expectedStatus: 202
+      });
+      const jobId = submitResponse.job_id;
+      assert(jobId, 'Summaries response should contain a job_id');
+
+      const resultDoc = await pollSummaryResult(server.port, jobId);
+      const rawSummary = resultDoc?.annotations?.policy_summary;
+      assert.equal(typeof rawSummary, 'string', 'Summary annotation should contain a JSON string');
+      return JSON.parse(rawSummary);
+    }
+  },
+  {
+    id: 'conversion-image',
+    method: 'POST',
+    url: 'conversion/image',
+    apiPrefix: 'charmonator',
+    responseMode: 'conversion/image',
+    properties: [],
+    buildRequest(model, requestOverrides) {
+      return {
+        model,
+        imageUrl: TEST_IMAGE_DATA_URL,
+        describe: false,
+        ...requestOverrides
+      };
+    },
+    async fetchResolvedValues(server, model, requestOverrides) {
+      const responseJson = await fetchJson({
+        method: this.method,
+        url: buildEndpointUrl(server.port, this),
+        body: this.buildRequest(model, requestOverrides)
+      });
+      assert.equal(typeof responseJson.markdown, 'string', 'conversion/image should return markdown text');
+      return JSON.parse(responseJson.markdown);
+    }
   }
 ];
 
@@ -37,15 +135,23 @@ const CONFIG_CASES = {
 };
 
 const MODELS = {
-  modelSpecific: 'policy-model-specific',
-  global: 'policy-global'
+  modelName(endpoint, scope) {
+    return `policy-${endpoint.id}-${scope}`;
+  }
 };
 
-function buildModelConfig(overrides = {}) {
+function getProperty(propertyName) {
+  const property = PROPERTY_MAP.get(propertyName);
+  assert(property, `Unknown test policy property: ${propertyName}`);
+  return property;
+}
+
+function buildModelConfig(endpoint, overrides = {}) {
   const modelConfig = {
     api: 'TestPolicy',
     model_type: 'chat',
-    test_policy_properties: POLICY_PROPERTIES.map(item => item.name)
+    test_policy_properties: [...endpoint.properties],
+    test_policy_response_mode: endpoint.responseMode
   };
 
   for (const [propertyName, overrideValue] of Object.entries(overrides)) {
@@ -60,18 +166,27 @@ function buildModelConfig(overrides = {}) {
 function buildScenarioConfig(configCaseName) {
   const configCase = CONFIG_CASES[configCaseName];
   const globalOverrides = {};
-  const modelSpecificOverrides = {};
+  const models = {};
 
-  if (configCaseName === 'globalOverride') {
-    for (const property of POLICY_PROPERTIES) {
-      globalOverrides[property.name] = property.globalOverrideValue;
-    }
-  }
+  for (const endpoint of ENDPOINTS) {
+    const modelSpecificOverrides = {};
 
-  if (configCaseName === 'modelOverride') {
-    for (const property of POLICY_PROPERTIES) {
-      modelSpecificOverrides[property.name] = property.modelOverrideValue;
+    if (configCaseName === 'globalOverride') {
+      for (const propertyName of endpoint.properties) {
+        const property = getProperty(propertyName);
+        globalOverrides[property.name] = property.globalOverrideValue;
+      }
     }
+
+    if (configCaseName === 'modelOverride') {
+      for (const propertyName of endpoint.properties) {
+        const property = getProperty(propertyName);
+        modelSpecificOverrides[property.name] = property.modelOverrideValue;
+      }
+    }
+
+    models[MODELS.modelName(endpoint, 'model-specific')] = buildModelConfig(endpoint, modelSpecificOverrides);
+    models[MODELS.modelName(endpoint, 'global')] = buildModelConfig(endpoint);
   }
 
   const config = {
@@ -80,10 +195,7 @@ function buildScenarioConfig(configCaseName) {
       port: configCase.port
     },
     ...globalOverrides,
-    models: {
-      [MODELS.modelSpecific]: buildModelConfig(modelSpecificOverrides),
-      [MODELS.global]: buildModelConfig()
-    }
+    models
   };
 
   return config;
@@ -103,6 +215,16 @@ async function writeGeneratedConfigFiles() {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function buildEndpointUrl(port, endpoint) {
+  if (endpoint.apiPrefix === 'charmonator') {
+    return `http://localhost:${port}/api/charmonator/v1/${endpoint.url}`;
+  }
+  if (endpoint.apiPrefix === 'charmonizer') {
+    return `http://localhost:${port}/api/charmonizer/v1/${endpoint.url}`;
+  }
+  throw new Error(`Unsupported apiPrefix: ${endpoint.apiPrefix}`);
 }
 
 async function waitForServer(baseUrl, child, output) {
@@ -150,7 +272,22 @@ async function startServer(configCase) {
   const baseUrl = `http://localhost:${configCase.port}/api/charmonator/v1`;
   await waitForServer(baseUrl, child, output);
 
-  return { child, baseUrl, output };
+  return { child, baseUrl, output, port: configCase.port };
+}
+
+async function fetchJson({ method, url, body = undefined, expectedStatus = 200 }) {
+  const response = await fetch(url, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const responseJson = await response.json();
+  assert.equal(
+    response.status,
+    expectedStatus,
+    `Expected ${expectedStatus} from ${method} ${url}, got ${response.status}: ${JSON.stringify(responseJson)}`
+  );
+  return responseJson;
 }
 
 async function stopServer(child) {
@@ -173,7 +310,7 @@ async function stopServer(child) {
   });
 }
 
-function parseResolvedValues(responseJson) {
+function parseAssistantJsonValues(responseJson) {
   assert(Array.isArray(responseJson.messages), 'Response should contain messages');
 
   const assistantMessage = responseJson.messages.find(message => message.role === 'assistant');
@@ -183,30 +320,34 @@ function parseResolvedValues(responseJson) {
   return JSON.parse(assistantMessage.content);
 }
 
-async function fetchResolvedValues({ configCase, model, requestOverrides }) {
+async function pollSummaryResult(port, jobId) {
+  const statusUrl = `http://localhost:${port}/api/charmonizer/v1/summaries/${jobId}`;
+  const resultUrl = `http://localhost:${port}/api/charmonizer/v1/summaries/${jobId}/result`;
+  const deadline = Date.now() + 10000;
+
+  while (Date.now() < deadline) {
+    const statusResponse = await fetch(statusUrl);
+    const statusJson = await statusResponse.json();
+
+    if (statusJson.status === 'complete') {
+      return await fetchJson({ method: 'GET', url: resultUrl });
+    }
+    if (statusJson.status === 'error') {
+      throw new Error(`Summaries job failed: ${JSON.stringify(statusJson)}`);
+    }
+
+    await sleep(100);
+  }
+
+  throw new Error(`Timed out waiting for summaries job ${jobId}`);
+}
+
+async function fetchResolvedValues({ endpoint, configCase, modelScope, requestOverrides }) {
   const server = await startServer(configCase);
 
   try {
-    const body = {
-      model,
-      transcript: {
-        messages: [
-          { role: 'user', content: 'Report the resolved default-parameter policy values for this request.' }
-        ]
-      },
-      ...requestOverrides
-    };
-
-    const response = await fetch(`${server.baseUrl}/transcript/extension`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-
-    const responseJson = await response.json();
-    assert(response.ok, `Expected 2xx status, got ${response.status}: ${JSON.stringify(responseJson)}`);
-
-    return parseResolvedValues(responseJson);
+    const model = MODELS.modelName(endpoint, modelScope);
+    return await endpoint.fetchResolvedValues(server, model, requestOverrides);
   } finally {
     await stopServer(server.child);
   }
@@ -223,109 +364,124 @@ describe('Default Parameter Policy', function() {
     await fs.rm(generatedConfigDir, { recursive: true, force: true });
   });
 
-  for (const property of POLICY_PROPERTIES) {
-    describe(property.name, function() {
-      describe('model-specific config', function() {
-        it('uses the populateConfigDefaults value with no overrides', async function() {
-          const resolved = await fetchResolvedValues({
-            configCase: CONFIG_CASES.noOverrides,
-            model: MODELS.modelSpecific,
-            requestOverrides: {}
+  for (const endpoint of ENDPOINTS) {
+    describe(`${endpoint.method} ${endpoint.url}`, function() {
+      for (const propertyName of endpoint.properties) {
+        const property = getProperty(propertyName);
+
+        describe(property.name, function() {
+          describe('model-specific config', function() {
+            it('uses the populateConfigDefaults value with no overrides', async function() {
+              const resolved = await fetchResolvedValues({
+                endpoint,
+                configCase: CONFIG_CASES.noOverrides,
+                modelScope: 'model-specific',
+                requestOverrides: {}
+              });
+
+              assert.equal(resolved[property.name], property.defaultValue);
+            });
+
+            it('uses the model-specific config override', async function() {
+              const resolved = await fetchResolvedValues({
+                endpoint,
+                configCase: CONFIG_CASES.modelOverride,
+                modelScope: 'model-specific',
+                requestOverrides: {}
+              });
+
+              assert.equal(resolved[property.name], property.modelOverrideValue);
+            });
+
+            it('uses the request override', async function() {
+              const resolved = await fetchResolvedValues({
+                endpoint,
+                configCase: CONFIG_CASES.noOverrides,
+                modelScope: 'model-specific',
+                requestOverrides: {
+                  [property.requestField]: property.requestOverrideValue
+                }
+              });
+
+              assert.equal(resolved[property.name], property.requestOverrideValue);
+            });
+
+            it('prefers the request override over the model-specific config override', async function() {
+              const resolved = await fetchResolvedValues({
+                endpoint,
+                configCase: CONFIG_CASES.modelOverride,
+                modelScope: 'model-specific',
+                requestOverrides: {
+                  [property.requestField]: property.requestOverrideValue
+                }
+              });
+
+              assert.equal(resolved[property.name], property.requestOverrideValue);
+            });
           });
 
-          assert.equal(resolved[property.name], property.defaultValue);
-        });
+          describe('global config', function() {
+            it('uses the populateConfigDefaults value with no overrides', async function() {
+              const resolved = await fetchResolvedValues({
+                endpoint,
+                configCase: CONFIG_CASES.noOverrides,
+                modelScope: 'global',
+                requestOverrides: {}
+              });
 
-        it('uses the model-specific config override', async function() {
-          const resolved = await fetchResolvedValues({
-            configCase: CONFIG_CASES.modelOverride,
-            model: MODELS.modelSpecific,
-            requestOverrides: {}
+              assert.equal(resolved[property.name], property.defaultValue);
+            });
+
+            it('uses the global config override', async function() {
+              const resolved = await fetchResolvedValues({
+                endpoint,
+                configCase: CONFIG_CASES.globalOverride,
+                modelScope: 'global',
+                requestOverrides: {}
+              });
+
+              assert.equal(resolved[property.name], property.globalOverrideValue);
+            });
+
+            it('ignores model-specific config from another model', async function() {
+              const resolved = await fetchResolvedValues({
+                endpoint,
+                configCase: CONFIG_CASES.modelOverride,
+                modelScope: 'global',
+                requestOverrides: {}
+              });
+
+              assert.equal(resolved[property.name], property.defaultValue);
+            });
+
+            it('uses the request override', async function() {
+              const resolved = await fetchResolvedValues({
+                endpoint,
+                configCase: CONFIG_CASES.noOverrides,
+                modelScope: 'global',
+                requestOverrides: {
+                  [property.requestField]: property.requestOverrideValue
+                }
+              });
+
+              assert.equal(resolved[property.name], property.requestOverrideValue);
+            });
+
+            it('prefers the request override over the global config override', async function() {
+              const resolved = await fetchResolvedValues({
+                endpoint,
+                configCase: CONFIG_CASES.globalOverride,
+                modelScope: 'global',
+                requestOverrides: {
+                  [property.requestField]: property.requestOverrideValue
+                }
+              });
+
+              assert.equal(resolved[property.name], property.requestOverrideValue);
+            });
           });
-
-          assert.equal(resolved[property.name], property.modelOverrideValue);
         });
-
-        it('uses the request override', async function() {
-          const resolved = await fetchResolvedValues({
-            configCase: CONFIG_CASES.noOverrides,
-            model: MODELS.modelSpecific,
-            requestOverrides: {
-              [property.requestField]: property.requestOverrideValue
-            }
-          });
-
-          assert.equal(resolved[property.name], property.requestOverrideValue);
-        });
-
-        it('prefers the request override over the model-specific config override', async function() {
-          const resolved = await fetchResolvedValues({
-            configCase: CONFIG_CASES.modelOverride,
-            model: MODELS.modelSpecific,
-            requestOverrides: {
-              [property.requestField]: property.requestOverrideValue
-            }
-          });
-
-          assert.equal(resolved[property.name], property.requestOverrideValue);
-        });
-      });
-
-      describe('global config', function() {
-        it('uses the populateConfigDefaults value with no overrides', async function() {
-          const resolved = await fetchResolvedValues({
-            configCase: CONFIG_CASES.noOverrides,
-            model: MODELS.global,
-            requestOverrides: {}
-          });
-
-          assert.equal(resolved[property.name], property.defaultValue);
-        });
-
-        it('uses the global config override', async function() {
-          const resolved = await fetchResolvedValues({
-            configCase: CONFIG_CASES.globalOverride,
-            model: MODELS.global,
-            requestOverrides: {}
-          });
-
-          assert.equal(resolved[property.name], property.globalOverrideValue);
-        });
-
-        it('ignores model-specific config from another model', async function() {
-          const resolved = await fetchResolvedValues({
-            configCase: CONFIG_CASES.modelOverride,
-            model: MODELS.global,
-            requestOverrides: {}
-          });
-
-          assert.equal(resolved[property.name], property.defaultValue);
-        });
-
-        it('uses the request override', async function() {
-          const resolved = await fetchResolvedValues({
-            configCase: CONFIG_CASES.noOverrides,
-            model: MODELS.global,
-            requestOverrides: {
-              [property.requestField]: property.requestOverrideValue
-            }
-          });
-
-          assert.equal(resolved[property.name], property.requestOverrideValue);
-        });
-
-        it('prefers the request override over the global config override', async function() {
-          const resolved = await fetchResolvedValues({
-            configCase: CONFIG_CASES.globalOverride,
-            model: MODELS.global,
-            requestOverrides: {
-              [property.requestField]: property.requestOverrideValue
-            }
-          });
-
-          assert.equal(resolved[property.name], property.requestOverrideValue);
-        });
-      });
+      }
     });
   }
 });
