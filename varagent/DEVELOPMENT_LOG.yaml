@@ -84,3 +84,14 @@
       result: 0 tests 18 failures
     - verification: ./node_modules/.bin/mocha test/testDefaultParameterPolicy.spec.mjs after removing sentinel
       result: 18 tests 0 failures
+- meta: {_: bug, guid: q6n1}
+  title: Transcript extension should use the schema repair option name consistently
+  prompt: |
+    Fix tests: time env CHARMONATOR_CONFIG=conf/config.unittest.json node ./node_modules/mocha/bin/mocha test/testDefaultParameterPolicy.spec.mjs
+  verifications:
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json /usr/bin/time -p node ./node_modules/mocha/bin/mocha test/testDefaultParameterPolicy.spec.mjs
+      result: 18 tests 0 failures
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json /usr/bin/time -p node ./node_modules/mocha/bin/mocha test/testDefaultParameterPolicy.spec.mjs with temporary sentinel throw in parseAssistantJsonValues
+      result: 18 tests 9 failures
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json /usr/bin/time -p node ./node_modules/mocha/bin/mocha test/testDefaultParameterPolicy.spec.mjs after removing sentinel
+      result: 18 tests 0 failures
