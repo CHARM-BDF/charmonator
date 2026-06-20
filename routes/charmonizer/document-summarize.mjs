@@ -938,6 +938,7 @@ async function getNondefective(chatModel, prefixFrag, options) {
  * Changed to accept an optional `options` object, 
  * which we pass as the fourth argument to `extendTranscript`.
  */
+
 export async function callLLM(chatModel, minimalTranscript, options = {}) {
   console.log("minimalTranscript:", minimalTranscript);
   const schema = options?.response_format?.json_schema?.schema || null;
@@ -967,6 +968,7 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       if (isValid) {
         return lastMsg.content;
       }
+      if(numleftSchema>=0) {
       const invalidSuffix = new TranscriptFragment([
         new Message('assistant', lastMsg.content)
       ]);
@@ -974,6 +976,7 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       prefixFrag = prefixFrag
         .plus(new Message('assistant', lastMsg.content))
         .plus(new Message('user', repairPrompt));
+      }
   }
   throw new Error('The response could not be validated after multiple attempts.');
 }
