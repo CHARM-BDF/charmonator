@@ -7,6 +7,7 @@ import { JSONDocument, tokenCount } from '../../lib/json-document.mjs';
 import { jsonSafeFromException, ProviderException } from '../../lib/providers/provider_exception.mjs';
 import { getConfig } from '../../lib/config.mjs';
 import { Message, TranscriptFragment } from '../../lib/transcript.mjs';
+import { isTranscriptMessageDefective } from '../../lib/transcript-extension.mjs';
 import { requestToRepair, validateAgainstSchema } from '../../lib/schema-validation.mjs';
 
 /**
@@ -915,17 +916,13 @@ function makeChatModel(modelName, systemText, temperature) {
   return chatModel;
 }
 
-function isDefective(msg) {
-  return (!msg || !msg.content || msg.content.length===0)
-}
-
 async function getNondefective(chatModel, prefixFrag, options) {
   let numleftDefective = options.num_defective_reply_max_attempts;
   while (numleftDefective>=0) {
     numleftDefective = numleftDefective-1;
     const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
     const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
-    if (isDefective(lastMsg)) {
+    if (isTranscriptMessageDefective(lastMsg)) {
       console.log({event:'Defective reply from from LLM, retrying', nAttemptsLeft: numleftDefective});
       continue;
     }
