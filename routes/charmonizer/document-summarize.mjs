@@ -914,7 +914,7 @@ function isDefective(msg) {
   return (!msg || !msg.content || msg.content.length===0)
 }
 
-function getNondefective(chatModel, prefixFrag, options) {
+async function getNondefective(chatModel, prefixFrag, options) {
   let numleftDefective = options.num_defective_reply_max_attempts;
   while (numleftDefective>=0) {
     numleftDefective = numleftDefective-1;
@@ -949,7 +949,16 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
   while (numleftSchema>=0) {
     numleftSchema -= 1;
     let attemptedSchemaRepair = false;
-    let lastMsg = getNondefective(chatModel, prefixFrag, options);
+    let lastMsg = await getNondefective(chatModel, prefixFrag, options);
+    if (!lastMsg) {
+      // Technically not a provider-specific exception, but this is the best way we have set up to communicate
+      // rare edge cases.
+      let ex = new ProviderException("Exhausted num_defective_reply_max_attempts.  Something seems to be wrong with this model or prompt.")
+      ex.interpretedErrorType = 'unclassified_api_error';
+      ex.interpretedCode = 500;
+      ex.interpretedMessage = 'An error occurred while processing your request.';
+      throw ex
+    }
       if (!schema) {
         return lastMsg.content;
       }
@@ -958,10 +967,6 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       if (isValid) {
         return lastMsg.content;
       }
-      if (numleftSchema <= 0) {
-        throw new Error('The response could not be validated after multiple attempts.');
-      }
-
       const invalidSuffix = new TranscriptFragment([
         new Message('assistant', lastMsg.content)
       ]);
@@ -970,13 +975,7 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
         .plus(new Message('assistant', lastMsg.content))
         .plus(new Message('user', repairPrompt));
   }
-  // Technically not a provider-specific exception, but this is the best way we have set up to communicate
-  // rare edge cases.
-  let ex = new ProviderException("Exhausted num_defective_reply_max_attempts.  Something seems to be wrong with this model or prompt.")
-  ex.interpretedErrorType = 'unclassified_api_error';
-  ex.interpretedCode = 500;
-  ex.interpretedMessage = 'An error occurred while processing your request.';
-  throw ex
+  throw new Error('The response could not be validated after multiple attempts.');
 }
 
 const router = express.Router();
