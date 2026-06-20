@@ -925,7 +925,7 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
   let numleftSchema = schema ? resolveSchemaRepairAttemptCount(options) : 0;
 
   while (true) {
-    let numleftDefective = 1 + options.num_defective_reply_max_attempts;
+    let numleftDefective = options.num_defective_reply_max_attempts;
     let attemptedSchemaRepair = false;
     while (numleftDefective>=0) {
       numleftDefective = numleftDefective-1;
