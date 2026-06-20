@@ -922,17 +922,17 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
   let prefixFrag = new TranscriptFragment(
     minimalTranscript.map(m => new Message(m.role, m.content))
   );
-  let repairAttemptsLeft = schema ? resolveSchemaRepairAttemptCount(options) : 0;
+  let numleftSchema = schema ? resolveSchemaRepairAttemptCount(options) : 0;
 
   while (true) {
-    let nAttemptsLeft = 1 + options.num_defective_reply_max_attempts;
-    let attemptedRepair = false;
-    while (nAttemptsLeft>=0) {
-      nAttemptsLeft = nAttemptsLeft-1;
+    let numleftDefective = 1 + options.num_defective_reply_max_attempts;
+    let attemptedSchemaRepair = false;
+    while (numleftDefective>=0) {
+      numleftDefective = numleftDefective-1;
       const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
       const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
       if (!lastMsg || !lastMsg.content || lastMsg.content.length===0) {
-        console.log({event:'Defective reply from from LLM, retrying', nAttemptsLeft});
+        console.log({event:'Defective reply from from LLM, retrying', nAttemptsLeft: numleftDefective});
         continue;
       }
       if(lastMsg.role !== 'assistant') {
@@ -947,7 +947,7 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       if (isValid) {
         return lastMsg.content;
       }
-      if (repairAttemptsLeft <= 0) {
+      if (numleftSchema <= 0) {
         throw new Error('The response could not be validated after multiple attempts.');
       }
 
@@ -958,12 +958,12 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       prefixFrag = prefixFrag
         .plus(new Message('assistant', lastMsg.content))
         .plus(new Message('user', repairPrompt));
-      repairAttemptsLeft -= 1;
-      attemptedRepair = true;
+      numleftSchema -= 1;
+      attemptedSchemaRepair = true;
       break;
     }
 
-    if (!attemptedRepair) {
+    if (!attemptedSchemaRepair) {
       break;
     }
   }
