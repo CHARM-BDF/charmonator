@@ -960,15 +960,15 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       ex.interpretedMessage = 'An error occurred while processing your request.';
       throw ex
     }
-      if (!schema) {
-        return lastMsg.content;
-      }
+    if (!schema) {
+      return lastMsg.content;
+    }
 
-      const { isValid, validationErrors } = validateStructuredReply(lastMsg.content, schema);
-      if (isValid) {
-        return lastMsg.content;
-      }
-      if(numleftSchema>=0) {
+    const { isValid, validationErrors } = validateStructuredReply(lastMsg.content, schema);
+    if (isValid) {
+      return lastMsg.content;
+    }
+    if(numleftSchema>=0) {
       const invalidSuffix = new TranscriptFragment([
         new Message('assistant', lastMsg.content)
       ]);
@@ -976,7 +976,7 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       prefixFrag = prefixFrag
         .plus(new Message('assistant', lastMsg.content))
         .plus(new Message('user', repairPrompt));
-      }
+    }
   }
   throw new Error('The response could not be validated after multiple attempts.');
 }
