@@ -224,3 +224,57 @@
       result: 0 tests 72 failures
     - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json node ./node_modules/mocha/bin/mocha test/testDefaultParameterPolicy.spec.mjs after removing sentinel
       result: 72 tests 0 failures
+- meta: {_: bug, guid: m9c4}
+  title: Summaries should return structured 422 errors for schema validation exhaustion
+  prompt: |
+    Bugfix change: make callLLM(...) throw a structured exception for schema-validation
+    exhaustion so the existing exception path can return HTTP 422 with validation metadata.
+
+    Requirements:
+
+    - Update routes/charmonizer/document-summarize.mjs so that the final schema-validation
+      exhaustion path in callLLM(...) no longer throws a plain Error('The response could not be
+      validated after multiple attempts.').
+    - Instead, throw a ProviderException carrying:
+        - interpretedErrorType = 'schema_validation_failed'
+        - interpretedCode = 422
+        - interpretedMessage = 'The response could not be validated after multiple attempts.'
+        - validation metadata equivalent to:
+            - mostValidOutput
+            - finalResponse
+    - Preserve exception-based control flow. Do not replace this with an inline return
+      res.status(...).json(...) inside callLLM(...).
+    - Make the supporting changes in lib/providers/provider_exception.mjs so that
+      jsonSafeFromException(...) preserves the new validation metadata when serializing a
+      ProviderException.
+    - Prefer one generic mechanism for extra exception payload over hard-coding many special-
+      case fields. A details object on ProviderException is acceptable.
+    - Update the relevant catch/response path(s) so that a thrown ProviderException with
+      interpretedCode = 422 is returned with HTTP status 422 instead of always 500.
+    - Keep existing behavior unchanged for other exceptions as much as possible.
+
+    Verification requirements:
+
+    - Add or update automated tests to show that schema-validation exhaustion now returns:
+        - HTTP 422
+        - the structured error message
+        - the validation metadata from the exception payload
+    - Follow repository workflow from AGENTS.md:
+        - scan varagent/DEVELOPMENT_LOG.yaml for precedent
+        - keep this as one bugfix-purpose change
+        - run the relevant official tests
+        - perform the Test Double Check Procedure on materially affected tests
+        - update varagent/DEVELOPMENT_LOG.yaml and varagent/IMPLEMENTATION_BACKLOG.yaml
+        - create a bugfix commit using the required format
+
+    Keep the implementation minimal and focused on structured exception transport for this
+    schema-validation failure path.
+  verifications:
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha test/testSummariesSchemaRepair.spec.mjs
+      result: 4 tests 0 failures
+    - verification: env TEST_DOUBLE_CHECK_THROW_SUMMARIES_SCHEMA_REPAIR=1 CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha test/testSummariesSchemaRepair.spec.mjs with temporary sentinel throw in schema-validation exhaustion tests
+      result: 4 tests 2 failures
+    - verification: env CHARMONATOR_CONFIG=conf/config.unittest.json ./node_modules/.bin/mocha test/testSummariesSchemaRepair.spec.mjs after removing sentinel
+      result: 4 tests 0 failures
+    - verification: npm test
+      result: 94 tests 0 failures 20 pending

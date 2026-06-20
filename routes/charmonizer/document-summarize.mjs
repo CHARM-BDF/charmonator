@@ -342,6 +342,11 @@ function validateStructuredReply(rawText, schema) {
   }
 }
 
+function interpretedHttpStatus(errorJson, fallback = 500) {
+  const code = Number(errorJson?.interpretedCode);
+  return Number.isInteger(code) ? code : fallback;
+}
+
 /**
  * Summarize the entire doc with one LLM call, store in top-level doc.annotations.
  */
@@ -946,15 +951,16 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
     minimalTranscript.map(m => new Message(m.role, m.content))
   );
   let numleftSchema = schema ? resolveSchemaRepairAttemptCount(options) : 0;
+  let mostValidOutput = null;
+  let finalResponse = null;
 
   while (numleftSchema>=0) {
     numleftSchema -= 1;
-    let attemptedSchemaRepair = false;
     let lastMsg = await getNondefective(chatModel, prefixFrag, options);
     if (!lastMsg) {
       // Technically not a provider-specific exception, but this is the best way we have set up to communicate
       // rare edge cases.
-      let ex = new ProviderException("Exhausted num_defective_reply_max_attempts.  Something seems to be wrong with this model or prompt.")
+      let ex = new ProviderException(new Error("Exhausted num_defective_reply_max_attempts.  Something seems to be wrong with this model or prompt."))
       ex.interpretedErrorType = 'unclassified_api_error';
       ex.interpretedCode = 500;
       ex.interpretedMessage = 'An error occurred while processing your request.';
@@ -964,11 +970,15 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       return lastMsg.content;
     }
 
-    const { isValid, validationErrors } = validateStructuredReply(lastMsg.content, schema);
+    const { isValid, parsed, validationErrors } = validateStructuredReply(lastMsg.content, schema);
+    finalResponse = lastMsg.content;
     if (isValid) {
       return lastMsg.content;
     }
     if(numleftSchema>=0) {
+      if (parsed !== null) {
+        mostValidOutput = parsed;
+      }
       const invalidSuffix = new TranscriptFragment([
         new Message('assistant', lastMsg.content)
       ]);
@@ -978,7 +988,15 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
         .plus(new Message('user', repairPrompt));
     }
   }
-  throw new Error('The response could not be validated after multiple attempts.');
+  const ex = new ProviderException(new Error('The response could not be validated after multiple attempts.'));
+  ex.interpretedErrorType = 'schema_validation_failed';
+  ex.interpretedCode = 422;
+  ex.interpretedMessage = 'The response could not be validated after multiple attempts.';
+  ex.details = {
+    mostValidOutput,
+    finalResponse
+  };
+  throw ex;
 }
 
 const router = express.Router();
@@ -1101,7 +1119,7 @@ router.post('/', async (req, res) => {
       stack: err.stack,
       errJson: j
     })
-    return res.status(500).json(j);
+    return res.status(interpretedHttpStatus(j)).json(j);
   }
 });
 
@@ -1155,7 +1173,7 @@ router.get('/:jobId/result', (req, res) => {
     });
   }
   if (job.status === 'error') {
-    return res.status(500).json({
+    return res.status(interpretedHttpStatus(job.error)).json({
       status: 'error',
       error: job.error,
       chunks_total: job.chunks_total,
