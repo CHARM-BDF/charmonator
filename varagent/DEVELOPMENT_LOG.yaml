@@ -278,3 +278,16 @@
       result: 4 tests 0 failures
     - verification: npm test
       result: 94 tests 0 failures 20 pending
+- meta: {_: bug, guid: v5p2}
+  title: Transcript extension should retry defective replies before schema repair handling
+  prompt: |
+    Implement a num_defective_reply_max_attempts loop (ala getNondefective) for /transcript/extension.
+  verifications:
+    - verification: ./node_modules/.bin/mocha test/testTranscriptExtensionDefectiveReplyRetry.spec.mjs
+      result: 2 tests 0 failures
+    - verification: env TEST_DOUBLE_CHECK_THROW=1 ./node_modules/.bin/mocha test/testTranscriptExtensionDefectiveReplyRetry.spec.mjs with temporary sentinel throw in the success-path assertion
+      result: 2 tests 1 failure
+    - verification: ./node_modules/.bin/mocha test/testTranscriptExtensionDefectiveReplyRetry.spec.mjs after removing sentinel
+      result: 2 tests 0 failures
+    - verification: npm test
+      result: 96 tests 0 failures 20 pending
