@@ -910,6 +910,10 @@ function makeChatModel(modelName, systemText, temperature) {
   return chatModel;
 }
 
+function isDefective(msg) {
+  return (!msg || !msg.content || msg.content.length===0)
+}
+
 /**
  * Helper: call the LLM with minimal transcript
  * 
@@ -931,7 +935,7 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       numleftDefective = numleftDefective-1;
       const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
       const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
-      if (!lastMsg || !lastMsg.content || lastMsg.content.length===0) {
+      if (isDefective(lastMsg)) {
         console.log({event:'Defective reply from from LLM, retrying', nAttemptsLeft: numleftDefective});
         continue;
       }
