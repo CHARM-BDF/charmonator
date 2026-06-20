@@ -914,6 +914,24 @@ function isDefective(msg) {
   return (!msg || !msg.content || msg.content.length===0)
 }
 
+function getNondefective(chatModel, prefixFrag, options) {
+  let numleftDefective = options.num_defective_reply_max_attempts;
+  while (numleftDefective>=0) {
+    numleftDefective = numleftDefective-1;
+    const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
+    const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
+    if (isDefective(lastMsg)) {
+      console.log({event:'Defective reply from from LLM, retrying', nAttemptsLeft: numleftDefective});
+      continue;
+    }
+    if(lastMsg.role !== 'assistant') {
+      console.log({event:"Warning: last reply from the LLM isn't?"});
+    }
+    return lastMsg
+  }
+  return null
+}
+
 /**
  * Helper: call the LLM with minimal transcript
  * 
@@ -928,21 +946,10 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
   );
   let numleftSchema = schema ? resolveSchemaRepairAttemptCount(options) : 0;
 
-  while (true) {
-    let numleftDefective = options.num_defective_reply_max_attempts;
+  while (numleftSchema>=0) {
+    numleftSchema -= 1;
     let attemptedSchemaRepair = false;
-    while (numleftDefective>=0) {
-      numleftDefective = numleftDefective-1;
-      const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
-      const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
-      if (isDefective(lastMsg)) {
-        console.log({event:'Defective reply from from LLM, retrying', nAttemptsLeft: numleftDefective});
-        continue;
-      }
-      if(lastMsg.role !== 'assistant') {
-        console.log({event:"Warning: last reply from the LLM isn't?"});
-      }
-
+    let lastMsg = getNondefective(chatModel, prefixFrag, options);
       if (!schema) {
         return lastMsg.content;
       }
@@ -962,14 +969,6 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       prefixFrag = prefixFrag
         .plus(new Message('assistant', lastMsg.content))
         .plus(new Message('user', repairPrompt));
-      numleftSchema -= 1;
-      attemptedSchemaRepair = true;
-      break;
-    }
-
-    if (!attemptedSchemaRepair) {
-      break;
-    }
   }
   // Technically not a provider-specific exception, but this is the best way we have set up to communicate
   // rare edge cases.
