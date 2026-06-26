@@ -388,7 +388,7 @@ router.post('/extract-contact-card', async (req, res) => {
 });
 ```
 
-With `response_format.type = "json_schema"`, the helper validates the assistant JSON against the schema and will attempt repair prompts before it gives up. If you need the exact HTTP behavior of the built-in API, including the `x-num-repair-attempts` header and the 422 failure payload, proxy the core `/api/charmonator/v1/transcript/extension` endpoint instead of calling the helper directly.
+With `response_format.type = "json_schema"`, the helper validates the assistant JSON against the schema and will attempt repair prompts before it gives up. The built-in `/api/charmonizer/v1/summaries` route now applies the same validation-and-repair pattern when its `json_schema` request field is present. If you need the exact HTTP behavior of the built-in transcript-extension API, including the `x-num-repair-attempts` header and the 422 failure payload, proxy the core `/api/charmonator/v1/transcript/extension` endpoint instead of calling the helper directly.
 
 ### Using Tools
 
