@@ -2,18 +2,14 @@ import tags from 'mocha-tags-ultra';
 import { strict as assert } from 'assert';
 import path from 'path';
 import fs from 'fs';
-import fetch from 'node-fetch';
 import { fileURLToPath } from 'url';
 import { validateAgainstSchema, requestToRepair } from '../lib/schema-validation.mjs';
-import { createAndStart } from '../lib/server.mjs';
-import Ajv from 'ajv';
+import { fetchChatModel } from '../lib/core.mjs';
+import { Message, TranscriptFragment } from '../lib/transcript.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Your existing server/test config parameters, as needed:
-const __port = 5003;
-const baseUrl = `http://localhost:${__port}/api/charmonator/v1`;
 const modelForChat = 'my-unittest-model';
 
 /**
@@ -74,41 +70,40 @@ const msTimeout = 600000 // TODO: iteration, timeoutMargin
 const dir_data = path.join(__dirname, 'data', 'extra', 'schema_repair');
 
 tags().describe('Test schema repair', function() {
-  let processes;
-
-  before(async function() {
-    this.timeout(10000);
-    processes = await createAndStart();
-  });
-
-  after(async function() {
-    this.timeout(10000);
-    await processes.cleanup();
-  });
   // Create one Mocha "it" test per instance-file
   tags('llm').it(`should repair a nonconformant answer`, async function() {
     this.timeout(msTimeout); 
     const pathLog = path.join(__dirname, path.basename(__filename)+".log")
     const fdLog = fs.openSync(pathLog, "w")
-    const testPairs = loadSchemaInstancePairs(dir_data);
-    let numTotalRepairAttempts = 0
+    const testPairs = loadSchemaInstancePairs(dir_data)
+      .map((pair) => ({
+        ...pair,
+        initialErrors: validateAgainstSchema(pair.instanceData, pair.schemaData)
+      }))
+      .filter((pair) => pair.initialErrors.length > 0);
+    assert(testPairs.length > 0, `No nonconformant fixtures found in ${dir_data}`);
+    const chatModel = fetchChatModel(modelForChat);
+    chatModel.system = [
+      'You repair one invalid JSON response to satisfy the requested schema.',
+      'Return only the repaired JSON instance.',
+      'Do not include schema metadata, explanations, or wrapper objects unless they are required by the schema and present in the invalid response.'
+    ].join(' ');
+    chatModel.temperature = 0.0;
     let brief = []
-    for (const { schemaPath, instancePath, schemaData, instanceData } of testPairs) {
-      // Prepare the user prompt, which includes the text: "Copy this data"
-      const promptHackTest = `Copy this data:\n${JSON.stringify(instanceData, null, 2)}`;
+    for (const { schemaPath, instancePath, schemaData, instanceData, initialErrors } of testPairs) {
+      const invalidSuffix = new TranscriptFragment([
+        new Message('assistant', JSON.stringify(instanceData, null, 2))
+      ]);
+      const repairPrompt = requestToRepair(invalidSuffix, initialErrors);
 
-      // Post to the existing /transcript/extension endpoint
-      const url = `${baseUrl}/transcript/extension`;
-      const requestBody = {
-        model: modelForChat,
-        system: 'You are a system that must validate JSON data.',
-        temperature: 0.0,
-        transcript: {
-          messages: [
-            { role: 'user', content: promptHackTest }
-          ]
-        },
-        options: {
+      const repairTranscript = new TranscriptFragment([
+        new Message('user', repairPrompt)
+      ]);
+      const repairedSuffix = await chatModel.extendTranscript(
+        repairTranscript,
+        null,
+        null,
+        {
           response_format: {
             type: 'json_schema',
             json_schema: {
@@ -116,23 +111,11 @@ tags().describe('Test schema repair', function() {
               schema: schemaData
             }
           }
-        },
-        num_schema_repair_max_attempts: 7
-      };
+        }
+      );
 
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      // The transcript returned by /transcript/extension typically has { messages: [...] }
-      const jsonRes = await resp.json();
-
-      const httpOk = resp.status >= 200 && resp.status < 300
-      const httpMsg = httpOk ? "" : `Unexpected status: ${resp.status}\n  body: ${jsonRes}`;
-
-      const assistantMessage = jsonRes.messages?.[jsonRes.messages.length - 1]?.content;
+      const repairedMessages = repairedSuffix.toJSON().messages || [];
+      const assistantMessage = repairedMessages[repairedMessages.length - 1]?.content;
 
       let parsedOutput = null;
       try {
@@ -153,17 +136,11 @@ tags().describe('Test schema repair', function() {
       const returnedSize = JSON.stringify(parsedOutput).length;
       const sizeOk = returnedSize >= 0.6 * originalSize;
 
-      const numRepairAttempts = resp.headers.get('x-num-repair-attempts')
-      numTotalRepairAttempts += numRepairAttempts
-
-      const ok = parseOk && errorsOk && sizeOk;
-
       const b = {
-        numAttempts: numRepairAttempts,
+        schemaPath,
         instancePath,
         parsedOutput,
-        httpOk,
-        httpMsg,
+        initialErrorsCount: initialErrors.length,
         parseOk,
         errorsOk,
         sizeOk
@@ -178,23 +155,14 @@ tags().describe('Test schema repair', function() {
       }, null, 2)+"\n")
       fs.fsyncSync(fdLog)
     }
+    fs.closeSync(fdLog)
     const allOk = (data) => {
       return brief.every(item =>
-        item.httpOk &&
         item.parseOk &&
         item.errorsOk &&
         item.sizeOk
       );
     };
-    // The 0-1 threshold indicates whether or not the repair prompt was needed at all.  In an
-    // ideal test fixturing, we would build a way to bypass the transcript extension API and go
-    // straight to schema repair, but instead we use promptHackTest, and that means we need to
-    // do this cleanup.  But it would be more code, and for an unclear benefit.  What does it
-    // mean if prommptHackTest gets through schema validation first try?  To me it seems that
-    // the the test input is not difficult enough for the model under test, there's no way
-    // we would have known that other than to have gathered the test example and seen it pass,
-    // and there is no action we need to take to resolve any problem.
-    const numAttemptsTotal = brief.reduce((acc, b) => (b["numAttempts"] >= 1 ? b["numAttempts"]-1 : 0) + acc, 0)
     if(!allOk) {
       console.log({
         "event": "schema repair test",
@@ -204,7 +172,7 @@ tags().describe('Test schema repair', function() {
     } else {
       console.log({
         "event": "schema repair test",
-        numFixesTotal: numAttemptsTotal
+        repairedCases: brief.length
       });
     }
   });
