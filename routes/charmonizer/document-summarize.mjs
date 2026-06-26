@@ -1023,7 +1023,7 @@ router.post('/', async (req, res) => {
 
       ms_client_request_timeout = null,
       num_client_request_max_attempts = null,
-      num_defective_reply_max_attempts = getConfig().num_defective_reply_max_attempts,
+      num_defective_reply_max_attempts = null,
       num_schema_repair_max_attempts = null,
 
       merge_summaries_guidance,
