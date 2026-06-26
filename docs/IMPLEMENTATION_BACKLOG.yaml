@@ -1,0 +1,35 @@
+- meta: {_: bug, id: BUG-0001, status: done, priority: medium, guid: l7m3}
+  title: lib/server.mjs should not reference undefined reject in createAndStart
+  expected_behavior: |
+    Server startup code should handle listen errors without referencing undefined variables, and the repository should lint without this no-undef failure.
+  evidence:
+    - npm run lint reports lib/server.mjs:191:18 error 'reject' is not defined no-undef
+    - createAndStart passes a callback to app.listen that returns reject(err) even though reject is not defined in scope
+    - createAndStart now awaits the listen lifecycle and npm run lint completes without errors
+  acceptance:
+    - createAndStart handles listen startup errors without an undefined identifier
+    - npm run lint no longer reports the no-undef error at lib/server.mjs:191
+  related:
+    - development_log: r8q2
+    - development_log: k4t9
+    - file: lib/server.mjs
+  notes: |
+    This defect was observed while verifying TEST-0001. It appears pre-existing and unrelated to the schema repair test bugfix.
+- meta: {_: bug, id: BUG-0002, status: open, priority: medium, guid: b7n4}
+  title: MCP calculator transcript extension should not loop tool calls until timeout
+  expected_behavior: |
+    The calculator transcript-extension flow should terminate after receiving the calculator result instead of issuing repeated tool-call turns until the Mocha timeout expires.
+  evidence:
+    - env CHARMONATOR_CONFIG=conf/config.unittest.json node ./node_modules/mocha/bin/mocha --grep "should call MCP calculator tool via transcript/extension" test/testMcpTranscriptExtension.spec.mjs reproduced repeated "finish_reason":"tool_calls" responses and timed out after 25 seconds on May 1, 2026
+    - The same test passed on a later rerun, which points to a nondeterministic model or transcript interaction rather than a deterministic fixture teardown failure
+    - The timeout-cleanup bugfix now aborts the in-flight request promptly on client disconnect, containing the fixture leak without removing the underlying repeated-tool-call behavior
+  acceptance:
+    - The calculator transcript-extension test completes without repeated tool-call recursion under conf/config.unittest.json
+    - The transcript returned after calculator execution includes a terminating assistant response instead of another calculator tool call
+  related:
+    - development_log: n2f6
+    - file: test/testMcpTranscriptExtension.spec.mjs
+    - file: routes/transcript-extension.mjs
+    - file: lib/providers/provider_openai.mjs
+  notes: |
+    Current containment: timed-out MCP fixtures now tear down promptly by aborting the disconnected transcript-extension request and force-closing active server connections.
