@@ -110,6 +110,8 @@ POST api/charmonator/v1/transcript/extension
   - **`response_format`** (object, optional): If supported, requests the model output in a specific format (e.g., JSON mode or structured JSON schema).  
     - *Note:* Some models (e.g. certain Anthropic or older local models) may **ignore** `response_format` and emit a warning if they do not support it.
 
+When `options.response_format.type` is `json_schema`, Charmonator parses the assistant message as JSON, validates it against `options.response_format.json_schema.schema`, and may issue internal repair prompts before returning a final result.
+
 > **Important:** Historically, you could pass `stream` as a top-level boolean. It remains supported for backward compatibility, but it is now recommended to pass both `stream` and `response_format` inside the `options` object.  
 
 #### Response (example)
@@ -122,8 +124,12 @@ POST api/charmonator/v1/transcript/extension
 }
 ```
 
+- **Response headers**:
+  - **`x-num-repair-attempts`**: Present on HTTP responses from this endpoint. `0` means the first assistant answer already satisfied the requested schema; larger values indicate how many repair rounds were needed before success or final failure.
+
 - **Errors**:
   - 400 if required fields are missing.
+  - 422 if a `json_schema` response still cannot be validated after the repair loop. The response body includes `error`, `mostValidOutput`, and `finalResponse`.
   - 500 on unexpected errors.
 
 *(See [Transcript JSON Structure](#transcript-json-structure) below.)*
@@ -738,7 +744,7 @@ POST api/charmonizer/v1/summaries
   - `"left-to-right"` (default) – merges summaries in a simple linear pass  
   - `"hierarchical"` – merges summaries in pairs (like merge-sort), potentially producing more balanced merges
 
-- **JSON-Structured Summaries**: Optionally specify `json_schema` to enforce a JSON format.
+- **JSON-Structured Summaries**: Optionally specify `json_schema` to request a structured JSON summary instead of plain text. When parsing succeeds, the stored annotation may be an object or array rather than a string.
 
 #### Request Body
 
@@ -808,7 +814,7 @@ POST api/charmonizer/v1/summaries
 - **`model`**: LLM to use.  
 - **`guidance`**: Additional user instructions for summarizing.  
 - **`temperature`**: LLM sampling temperature (float).  
-- **`json_schema`**: If given, output is forced to conform to that schema.  
+- **`json_schema`**: If given, output is requested as structured JSON matching that schema. When parsing succeeds, the stored annotation may be an object or array instead of prose text.  
 - **`json_sum`**: For `"delta-fold"`, how new deltas combine with the existing summary (usually `"append"`).  
 - **`initial_summary`**: For `"fold"` / `"delta-fold"`, seeds the accumulation.  
 - **`annotation_field`**: The doc-level or chunk-level annotations key where the summary is stored (default: `"summary"`).  
@@ -871,7 +877,7 @@ GET api/charmonizer/v1/summaries/{job_id}/result
   }
 }
 ```
-*(If you requested a `json_schema`, then the `summary` might be structured JSON. If method = `delta-fold`, then `annotations.summary` could be an **array** of deltas, and each chunk’s partial summary is in `annotations.summary_delta`. For `map-merge`, the final top-level summary is stored in `annotations.summary`, while each chunk also has a partial summary. For `merge`, chunk summaries must already exist, and the endpoint simply merges them into a single doc-level summary, optionally controlled by `merge_mode`.)*
+*(If you requested a `json_schema`, then the `summary` might be structured JSON rather than a string. If method = `delta-fold`, then `annotations.summary` could be an **array** of deltas, and each chunk’s partial summary is in `annotations.summary_delta`. For `map-merge`, the final top-level summary is stored in `annotations.summary`, while each chunk also has a partial summary. For `merge`, chunk summaries must already exist, and the endpoint simply merges them into a single doc-level summary, optionally controlled by `merge_mode`.)*
 
 ---
 
