@@ -32,6 +32,7 @@ const ENDPOINTS = [
     apiPrefix: 'charmonator',
     responseMode: 'transcript/extension',
     properties: [
+      'num_client_request_max_attempts',
       'ms_client_request_timeout'
     ],
     buildRequest(model, requestOverrides) {
@@ -61,6 +62,7 @@ const ENDPOINTS = [
     apiPrefix: 'charmonizer',
     responseMode: 'summaries',
     properties: [
+      'num_client_request_max_attempts',
       'ms_client_request_timeout'
     ],
     buildRequest(model, requestOverrides) {
@@ -147,10 +149,18 @@ function getProperty(propertyName) {
 }
 
 function buildModelConfig(endpoint, overrides = {}) {
+  const testPolicyRequestFields = Object.fromEntries(
+    endpoint.properties.map(propertyName => {
+      const property = getProperty(propertyName);
+      return [property.name, property.requestField];
+    })
+  );
+
   const modelConfig = {
     api: 'TestPolicy',
     model_type: 'chat',
     test_policy_properties: [...endpoint.properties],
+    test_policy_request_fields: testPolicyRequestFields,
     test_policy_response_mode: endpoint.responseMode
   };
 
