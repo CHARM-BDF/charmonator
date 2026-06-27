@@ -81,6 +81,19 @@ function stripJsonCodeFence(str) {
   return str.replace(/^```(?:json)?\s*([\s\S]+?)\s*```$/i, '$1').trim();
 }
 
+export function interpretedHttpStatus(errorJson, fallback = 500) {
+  const code = Number(errorJson?.interpretedCode);
+  return Number.isInteger(code) ? code : fallback;
+}
+
+export function buildConversionImageErrorResponse(error) {
+  const errorJson = jsonSafeFromException(error);
+  return {
+    status: interpretedHttpStatus(errorJson),
+    body: errorJson
+  };
+}
+
 /** ============================================================================
  * POST /conversion/image
  * ----------------------------------------------------------------------------
@@ -262,40 +275,12 @@ router.post('/image', async (req, res) => {
     res.json(responsePayload);
 
   } catch (error) {
-    const j = jsonSafeFromException(error)
+    const response = buildConversionImageErrorResponse(error);
     console.error({"event": "Error during /conversion/image",
       stack: error.stack,
-      errJson: j
+      errJson: response.body
     })
-    res.status(500).json(j);
-    return
-    // TODO: confirm that the above supersedes the below.
-    /*
-    console.error('Error during /conversion/image:', error);
-
-    // Handle enhanced errors from providers
-    if (error.interpretedErrorType && error.httpStatus && error.userMessage) {
-      // This is an enhanced error from a provider
-      const response = {
-        error: error.userMessage,
-        errorType: error.interpretedErrorType,
-        provider: error.provider || 'unknown'
-      };
-      
-      // Add additional context for specific error types
-      if (error.interpretedErrorType === 'content_filter_violation') {
-        response.details = 'The image content was flagged by content filtering policies. Please ensure the image contains appropriate content and try again.';
-      }
-      
-      return res.status(error.httpStatus).json(response);
-    }
-    
-    // Fallback for non-enhanced errors
-    res.status(500).json({
-      error: error.message || 'An unexpected error occurred while transcribing the image.',
-      errorType: 'unknown_error'
-    });
-    */
+    res.status(response.status).json(response.body);
   }
 });
 
@@ -589,4 +574,3 @@ router.post('/file', upload.single('file'), async (req, res) => {
 });
 
 export default router;
-
