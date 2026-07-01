@@ -275,6 +275,14 @@ router.post('/image', async (req, res) => {
     res.json(responsePayload);
 
   } catch (error) {
+    /*
+    One subtle point on why path differs from other callers of `jsonSafeFromException`:
+
+    POST /conversions/documents has a parameter continue_on_failure implemented in processPdfDocument.
+    processPdfDocument implements a parameter continue_on_failure in an exception handler by testing interpretedErrorType == 'content_filter_violation'.
+
+    However, processPdfDocument uses loopback HTTP POST /image requests to process its pages.  Therefore, if we don't prperly serialize here (and the call doesn't properly deserialize) metadata such as interpretedErrorType=='content_filter_violation' and HTTP status, the continue_on_failure feature will not have the information it needs to identify that specific failure mode.
+    */
     const response = buildConversionImageErrorResponse(error);
     console.error({"event": "Error during /conversion/image",
       stack: error.stack,
