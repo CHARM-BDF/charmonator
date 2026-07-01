@@ -284,10 +284,11 @@ router.post('/image', async (req, res) => {
     However, processPdfDocument uses loopback HTTP POST /image requests to process its pages.  Therefore, if we don't prperly serialize here (and the call doesn't properly deserialize) metadata such as interpretedErrorType=='content_filter_violation' and HTTP status, the continue_on_failure feature will not have the information it needs to identify that specific failure mode.
     */
     const response = buildConversionImageErrorResponse(error);
-    console.error({"event": "Error during /conversion/image",
-      stack: error.stack,
-      errJson: response.body
-    })
+    if(req.body?.model != "test-policy-conversion-image-content-filter")
+      console.error({"event": "Error during /conversion/image",
+        stack: error.stack,
+        errJson: response.body
+      })
     res.status(response.status).json(response.body);
   }
 });
