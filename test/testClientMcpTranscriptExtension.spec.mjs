@@ -1,7 +1,7 @@
 import tags from 'mocha-tags-ultra';
 import { strict as assert } from 'assert';
 import fetch from 'node-fetch';
-import { createAndStart } from '../lib/server.mjs';
+import { useManagedServerFixture } from './support/managed-server-fixture.mjs';
 
 const __port = 5003;
 const mymodel = 'my-unittest-model';
@@ -38,17 +38,7 @@ async function executeClientTool(toolName, args) {
 }
 
 tags().describe('Client-side MCP flow (client executes tools)', function() {
-  let processes;
-
-  before(async function() {
-    this.timeout(10000);
-    processes = await createAndStart();
-  });
-
-  after(async function() {
-    this.timeout(10000);
-    await processes.cleanup();
-  });
+  useManagedServerFixture({ perTest: true });
 
   tags('llm').it('should allow client_tools tool call + client execution + tool_response followup', async function() {
     this.timeout(5000 * timeoutMargin);

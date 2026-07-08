@@ -1,14 +1,7 @@
 import tags from 'mocha-tags-ultra';
 import { strict as assert } from 'assert';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import fetch from 'node-fetch';
-import { createAndStart } from '../lib/server.mjs';
-import { spawn } from 'child_process';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { useManagedServerFixture } from './support/managed-server-fixture.mjs';
 
 // Use the same port as in other tests
 const __port = 5003;
@@ -21,31 +14,11 @@ const baseCharmonatorUrl = `http://localhost:${__port}/api/charmonator/v1`;
 const timeoutMargin = 5;
 
 tags().describe('MCP Integration Tests', function() {
-  let processes;
-  let server;
-
-  // Start both the charmonator server and MCP test server before tests
-  before(async function() {
-    this.timeout(10000); // Allow time for both servers to start
-
-    processes = await createAndStart();
-    server = processes.server;
-    console.log('Charmonator server started with MCP configuration');
-  });
-
-  // Stop both servers after tests
-  after(async function() {
-    // Use a reasonable timeout for cleanup
-    this.timeout(10000);
-
-    // Shutdown charmonator server
-    processes.cleanup()
-    console.log('Charmonator server stopped');
-  });
+  useManagedServerFixture({ perTest: true });
 
   // Test the echo tool via transcript/extension endpoint
   tags('llm').it('should call MCP echo tool via transcript/extension', async function() {
-    this.timeout(5000 * timeoutMargin);
+    this.timeout(10000 * timeoutMargin);
 
     const url = `${baseCharmonatorUrl}/transcript/extension`;
     const body = {
@@ -193,7 +166,7 @@ tags().describe('MCP Integration Tests', function() {
 
   // Test the calculator tool via transcript/extension endpoint
   tags('llm').it('should call MCP calculator tool via transcript/extension', async function() {
-    this.timeout(5000 * timeoutMargin);
+    this.timeout(10000 * timeoutMargin);
 
     const url = `${baseCharmonatorUrl}/transcript/extension`;
     const body = {

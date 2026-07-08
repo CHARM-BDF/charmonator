@@ -68,10 +68,16 @@ Aliases are resolved recursively, and circular references are detected and will 
   - Timeout events are noted in the stdout log.
   - If specified in a model, model value overrides the global value.
 
-- max_attempts
-  - Number of times to attempt each downstream HTTP call.  Before any timeout, the first call counts as 1 attempt.
+- num_client_request_max_attempts
+  - Number of times to attempt each downstream HTTP call. Before any timeout, the first call counts as 1 attempt.
   - Defaults to 2.
   - If specified in a model, model value overrides the global value.
+
+- num_schema_repair_max_attempts
+  - Maximum number of follow-up schema-repair attempts to allow after a structured JSON answer fails schema validation.
+  - This applies to schema-repair flows driven by transcript extension requests that use `response_format.type = "json_schema"`, and to `/api/charmonizer/v1/summaries` jobs that set `json_schema`.
+  - If specified in a model, model value overrides the global value.
+  - If omitted from a model, configuration loading fills it from the top-level value or `2`.
 
 - num_defective_reply_max_attempts (rare to change)
   - Very occasionally (less than 1 in 10000 calls), some providers will respond to a request without emitting any messages at all, not even empty ones.  We call this a "defective" response.
@@ -197,8 +203,11 @@ Example:
       - Entries that match `config.tools` load server-side JS tools.
       - If `config.mcp` is present, entries that do not match `config.tools` are treated as MCP tool names/aliases.
 
-    - max_attempts
-      - See top-level key max_attempts.
+    - num_client_request_max_attempts
+      - See top-level key num_client_request_max_attempts.
+
+    - num_schema_repair_max_attempts
+      - See top-level key num_schema_repair_max_attempts. This also affects `/summaries` requests that rely on the model.
 
     - ms_client_request_timeout
       - See top-level key ms_client_request_timeout.

@@ -14,6 +14,7 @@ Key points include:
 - **Content Representation:** A document object may contain its full text in the `content` field or refer to a substring of its parent’s content via the `start` and `length` fields.
 - **Hierarchy:** Documents may contain child documents (chunks) organized by logical groups (for example, pages) in the `chunks` field.
 - **Metadata and Annotations:** Additional information (e.g. extraction confidence, page number, summarization results) is stored in the `metadata` and `annotations` fields.
+- **Structured Annotations:** Annotation values may be plain text or schema-shaped JSON, depending on the endpoint and request options used to create them.
 - **Embeddings:** Optionally, document objects may have an `embeddings` field mapping model names to embedding vectors.
 
 The JSON document object wrapper library (see *lib/json-document.mjs*) also supports helper functions (e.g. `getResolvedContent()`, `mergeChunksByTokenCount()`, `tokenCount()`) that enforce these invariants.
@@ -55,6 +56,9 @@ Each JSON document object is an object with the following keys:
 - **Description:** A free-form dictionary for storing processing annotations.
 - **Usage:** For example, summarization endpoints will add fields such as `annotations.summary` or, in some cases, per-chunk summaries in `annotations.summary_delta`.
 - **Invariant:** If present, must be an object. There is no strict schema enforced here; however, downstream processes expect that if a summary is produced it will be stored in `annotations.summary`.
+- **Structured-output note:** `annotations.summary` is not limited to prose strings. When a summarization request uses `json_schema`, the stored value may be any JSON value that matches that schema, commonly an object or array.
+- **Schema-repair note:** The `/summaries` route validates structured summary replies against the requested schema and may issue repair prompts before completing the job. Successful repairs are stored as normal structured annotations.
+- **Parse-preservation note:** Some routes preserve malformed structured-output replies by storing an object such as `{ "__json_parse_error": "...", "raw_text": "..." }` instead of discarding the raw model output. `/summaries` now prefers schema repair for `json_schema` requests and will fail the job if it still cannot obtain a valid structured result.
 
 ### 7. `metadata` (object, optional)
 - **Description:** A free-form dictionary for metadata about the document.
@@ -197,5 +201,3 @@ This example shows a document object that represents a single chunk (for example
 This specification defines the structure and invariants for JSON document objects used throughout the system. By following these guidelines, all components (including file conversion, summarization, embedding, and tool-based processing) can consistently generate and manipulate document objects. Please refer to this document when developing new processing functions or extending the API.
 
 ```
-
-

@@ -13,6 +13,30 @@ const TEST_IMAGE_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAA
 
 const POLICY_PROPERTIES = [
   {
+    name: 'num_schema_repair_max_attempts',
+    requestField: 'num_schema_repair_max_attempts',
+    defaultValue: 5,
+    modelOverrideValue: 15,
+    globalOverrideValue: 25,
+    requestOverrideValue: 35
+  },
+  {
+    name: 'num_defective_reply_max_attempts',
+    requestField: 'num_defective_reply_max_attempts',
+    defaultValue: 5,
+    modelOverrideValue: 15,
+    globalOverrideValue: 25,
+    requestOverrideValue: 35
+  },
+  {
+    name: 'num_client_request_max_attempts',
+    requestField: 'num_client_request_max_attempts',
+    defaultValue: 2,
+    modelOverrideValue: 12,
+    globalOverrideValue: 22,
+    requestOverrideValue: 32
+  },
+  {
     name: 'ms_client_request_timeout',
     requestField: 'ms_client_request_timeout',
     defaultValue: 600000,
@@ -32,6 +56,9 @@ const ENDPOINTS = [
     apiPrefix: 'charmonator',
     responseMode: 'transcript/extension',
     properties: [
+      'num_schema_repair_max_attempts',
+      'num_defective_reply_max_attempts',
+      'num_client_request_max_attempts',
       'ms_client_request_timeout'
     ],
     buildRequest(model, requestOverrides) {
@@ -61,6 +88,9 @@ const ENDPOINTS = [
     apiPrefix: 'charmonizer',
     responseMode: 'summaries',
     properties: [
+      'num_schema_repair_max_attempts',
+      'num_defective_reply_max_attempts',
+      'num_client_request_max_attempts',
       'ms_client_request_timeout'
     ],
     buildRequest(model, requestOverrides) {
@@ -147,10 +177,18 @@ function getProperty(propertyName) {
 }
 
 function buildModelConfig(endpoint, overrides = {}) {
+  const testPolicyRequestFields = Object.fromEntries(
+    endpoint.properties.map(propertyName => {
+      const property = getProperty(propertyName);
+      return [property.name, property.requestField];
+    })
+  );
+
   const modelConfig = {
     api: 'TestPolicy',
     model_type: 'chat',
     test_policy_properties: [...endpoint.properties],
+    test_policy_request_fields: testPolicyRequestFields,
     test_policy_response_mode: endpoint.responseMode
   };
 
