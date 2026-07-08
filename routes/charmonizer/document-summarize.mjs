@@ -7,6 +7,7 @@ import { JSONDocument, tokenCount } from '../../lib/json-document.mjs';
 import { jsonSafeFromException, ProviderException } from '../../lib/providers/provider_exception.mjs';
 import { getConfig } from '../../lib/config.mjs';
 import { Message, TranscriptFragment } from '../../lib/transcript.mjs';
+import { isTranscriptMessageDefective } from '../../lib/transcript-extension.mjs';
 import { requestToRepair, validateAgainstSchema } from '../../lib/schema-validation.mjs';
 
 /**
@@ -340,6 +341,11 @@ function validateStructuredReply(rawText, schema) {
       isValid: false
     };
   }
+}
+
+function interpretedHttpStatus(errorJson, fallback = 500) {
+  const code = Number(errorJson?.interpretedCode);
+  return Number.isInteger(code) ? code : fallback;
 }
 
 /**
@@ -910,12 +916,31 @@ function makeChatModel(modelName, systemText, temperature) {
   return chatModel;
 }
 
+async function getNondefective(chatModel, prefixFrag, options) {
+  let numleftDefective = options.num_defective_reply_max_attempts;
+  while (numleftDefective>=0) {
+    numleftDefective = numleftDefective-1;
+    const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
+    const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
+    if (isTranscriptMessageDefective(lastMsg)) {
+      console.log({event:'Defective reply from from LLM, retrying', nAttemptsLeft: numleftDefective});
+      continue;
+    }
+    if(lastMsg.role !== 'assistant') {
+      console.log({event:"Warning: last reply from the LLM isn't?"});
+    }
+    return lastMsg
+  }
+  return null
+}
+
 /**
  * Helper: call the LLM with minimal transcript
  * 
  * Changed to accept an optional `options` object, 
  * which we pass as the fourth argument to `extendTranscript`.
  */
+
 export async function callLLM(chatModel, minimalTranscript, options = {}) {
   console.log("minimalTranscript:", minimalTranscript);
   const schema = options?.response_format?.json_schema?.schema || null;
@@ -923,34 +948,34 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
     minimalTranscript.map(m => new Message(m.role, m.content))
   );
   let numleftSchema = schema ? resolveSchemaRepairAttemptCount(options) : 0;
+  let mostValidOutput = null;
+  let finalResponse = null;
 
-  while (true) {
-    let numleftDefective = 1 + options.num_defective_reply_max_attempts;
-    let attemptedSchemaRepair = false;
-    while (numleftDefective>=0) {
-      numleftDefective = numleftDefective-1;
-      const suffixFrag = await chatModel.extendTranscript(prefixFrag, undefined, undefined, options);
-      const lastMsg = suffixFrag.messages[suffixFrag.messages.length - 1];
-      if (!lastMsg || !lastMsg.content || lastMsg.content.length===0) {
-        console.log({event:'Defective reply from from LLM, retrying', nAttemptsLeft: numleftDefective});
-        continue;
-      }
-      if(lastMsg.role !== 'assistant') {
-        console.log({event:"Warning: last reply from the LLM isn't?"});
-      }
+  while (numleftSchema>=0) {
+    numleftSchema -= 1;
+    let lastMsg = await getNondefective(chatModel, prefixFrag, options);
+    if (!lastMsg) {
+      // Technically not a provider-specific exception, but this is the best way we have set up to communicate
+      // rare edge cases.
+      let ex = new ProviderException(new Error("Exhausted num_defective_reply_max_attempts.  Something seems to be wrong with this model or prompt."))
+      ex.interpretedErrorType = 'unclassified_api_error';
+      ex.interpretedCode = 500;
+      ex.interpretedMessage = 'An error occurred while processing your request.';
+      throw ex
+    }
+    if (!schema) {
+      return lastMsg.content;
+    }
 
-      if (!schema) {
-        return lastMsg.content;
+    const { isValid, parsed, validationErrors } = validateStructuredReply(lastMsg.content, schema);
+    finalResponse = lastMsg.content;
+    if (isValid) {
+      return lastMsg.content;
+    }
+    if(numleftSchema>=0) {
+      if (parsed !== null) {
+        mostValidOutput = parsed;
       }
-
-      const { isValid, validationErrors } = validateStructuredReply(lastMsg.content, schema);
-      if (isValid) {
-        return lastMsg.content;
-      }
-      if (numleftSchema <= 0) {
-        throw new Error('The response could not be validated after multiple attempts.');
-      }
-
       const invalidSuffix = new TranscriptFragment([
         new Message('assistant', lastMsg.content)
       ]);
@@ -958,22 +983,17 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       prefixFrag = prefixFrag
         .plus(new Message('assistant', lastMsg.content))
         .plus(new Message('user', repairPrompt));
-      numleftSchema -= 1;
-      attemptedSchemaRepair = true;
-      break;
-    }
-
-    if (!attemptedSchemaRepair) {
-      break;
     }
   }
-  // Technically not a provider-specific exception, but this is the best way we have set up to communicate
-  // rare edge cases.
-  let ex = new ProviderException("Exhausted num_defective_reply_max_attempts.  Something seems to be wrong with this model or prompt.")
-  ex.interpretedErrorType = 'unclassified_api_error';
-  ex.interpretedCode = 500;
-  ex.interpretedMessage = 'An error occurred while processing your request.';
-  throw ex
+  const ex = new ProviderException(new Error('The response could not be validated after multiple attempts.'));
+  ex.interpretedErrorType = 'schema_validation_failed';
+  ex.interpretedCode = 422;
+  ex.interpretedMessage = 'The response could not be validated after multiple attempts.';
+  ex.details = {
+    mostValidOutput,
+    finalResponse
+  };
+  throw ex;
 }
 
 const router = express.Router();
@@ -1096,7 +1116,7 @@ router.post('/', async (req, res) => {
       stack: err.stack,
       errJson: j
     })
-    return res.status(500).json(j);
+    return res.status(interpretedHttpStatus(j)).json(j);
   }
 });
 
@@ -1150,7 +1170,7 @@ router.get('/:jobId/result', (req, res) => {
     });
   }
   if (job.status === 'error') {
-    return res.status(500).json({
+    return res.status(interpretedHttpStatus(job.error)).json({
       status: 'error',
       error: job.error,
       chunks_total: job.chunks_total,
