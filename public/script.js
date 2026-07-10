@@ -782,6 +782,28 @@ function hideThinkingIndicator() {
 }
 
 /**
+ * A best effort JSON formatter.
+ */
+function tryPrettyPrintJSON(json) {
+  // TODO: try to render json without a markdown filter
+  try {
+    return ({
+      "messages": json.messages.map(msg => {
+          const role = msg['role']
+          let content = msg['content']
+          content = JSON.stringify(JSON.parse(content), null, 2)
+          // play with fire: seems totally bogus but works
+          content = "```\n" + content + "\n```"
+          return {role, content}
+      })
+    })
+  } catch(ex) {
+    console.error(ex)
+    return json
+  }
+}
+
+/**
  * Send message (user typed + attachments)
  */
 async function sendMessage() {
@@ -794,10 +816,14 @@ async function sendMessage() {
   // Build content array for the user message
   // We want to store both text + attachments
   const finalContent = [];
+  let finalSchema = null;
   if (typedText) {
     finalContent.push(typedText);
   }
   for (const att of pendingAttachments) {
+    if (att.fileName.endsWith(".schema.json")) {
+      finalSchema = att.content
+    }
     if (att.type === 'image') {
       // Convert to an ImageAttachment
       const imgAttachment = new ImageAttachment(att.content);
@@ -833,6 +859,17 @@ async function sendMessage() {
       temperature,
       transcript: currentTranscript.toJSON()
     };
+    if(finalSchema) {
+      const jsonSchemaParsed = JSON.parse(finalSchema)
+      payload.options = payload.opttions || {}
+      payload.options.response_format = {
+        'type': 'json_schema',
+        'json_schema': {
+          'name': 'forced-schema',
+          'schema': jsonSchemaParsed
+        }
+      }
+    }
 
     const response = await fetch(`${CHARMONATOR_API_URL}/transcript/extension`, {
       method: 'POST',
@@ -887,7 +924,10 @@ async function sendMessage() {
       data = { error: `Failed to parse response: ${parseError.message}` };
     }
     if (response.ok) {
-      const suffix = TranscriptFragment.fromJSON(data);
+      // If we asked to force JSON schema, then it's reasonable to expect that we
+      // got JSON back.
+      const dataFormatted = finalSchema ? tryPrettyPrintJSON(data) : data
+      const suffix = TranscriptFragment.fromJSON(dataFormatted);
       currentTranscript = currentTranscript.plus(suffix);
 
       // Display new assistant messages
