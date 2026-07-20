@@ -16,6 +16,30 @@ import { imageToMarkdown } from '../../lib/core.mjs';
 import { scrutinizeViaDiff2 } from '../../lib/scrutinize.mjs';
 import { jsonSafeFromException, ProviderException } from '../../lib/providers/provider_exception.mjs';
 
+function buildPdfProcessingDeps() {
+  return {
+    parsePdf: fileBuffer => pdfParse(fileBuffer),
+    createPdfConverter: (pdfPath, options) => pdf2picFromPath(pdfPath, options),
+    readImage: imagePath => Jimp.read(imagePath),
+    ocrPageBuffer,
+    fallbackVisionModel,
+    unlinkFile: filePath => fs.promises.unlink(filePath)
+  };
+}
+
+let pdfProcessingDeps = buildPdfProcessingDeps();
+
+export function setPdfProcessingTestDeps(overrides = {}) {
+  pdfProcessingDeps = {
+    ...buildPdfProcessingDeps(),
+    ...overrides
+  };
+}
+
+export function resetPdfProcessingTestDeps() {
+  pdfProcessingDeps = buildPdfProcessingDeps();
+}
+
 /**
  * We'll store job data in memory for demonstration.
  * In production, consider using a database or persistent storage.
@@ -415,9 +439,11 @@ async function processDocumentAsync(jobRec) {
 /**
  * If PDF, do the original OCR + fallback approach
  */
-async function processPdfDocument(jobRec, tmpPdfPath) {
+export async function processPdfDocument(jobRec, tmpPdfPath) {
+  const deps = pdfProcessingDeps;
+
   try {
-    const parsed = await pdfParse(jobRec.fileBuffer);
+    const parsed = await deps.parsePdf(jobRec.fileBuffer);
     const numPages = parsed.numpages || 1;
     jobRec.pages_total = numPages;
     jobRec.pages_converted = 0;
@@ -432,7 +458,7 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
       let pageChunk;
       
       try {
-        const converter = pdf2picFromPath(tmpPdfPath, {
+        const converter = deps.createPdfConverter(tmpPdfPath, {
           density: 300,
           saveFilename: `page_${i}_${jobRec.id}`,
           savePath: 'uploads',
@@ -446,11 +472,11 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
         }
 
         // read as PNG
-        const image = await Jimp.read(output.path);
+        const image = await deps.readImage(output.path);
         const pngBuffer = await image.getBuffer('image/png');
 
         // Tesseract OCR
-        const ocr = await ocrPageBuffer(pngBuffer);
+        const ocr = await deps.ocrPageBuffer(pngBuffer);
         let pageText = ocr.text;
         let textMethod = 'ocr';
         let confidence = ocr.qualityScore;
@@ -463,7 +489,7 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
         // if confidence < threshold => fallback
         let isFirstPageDetected = false;
         if (confidence < jobRec.ocr_threshold) {
-          const fallbackResult = await fallbackVisionModel(
+          const fallbackResult = await deps.fallbackVisionModel(
             pngBuffer,
             jobRec.model,
             jobRec,
@@ -484,7 +510,7 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
             if (i === 0) {
               isFirstPageDetected = true;
             } else {
-              const boundaryOnly = await fallbackVisionModel(
+              const boundaryOnly = await deps.fallbackVisionModel(
                 pngBuffer,
                 jobRec.model,
                 jobRec,
@@ -506,7 +532,7 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
           isFirstPageDetected = true;
         }
 
-        fs.promises.unlink(output.path).catch(() => {});
+        deps.unlinkFile(output.path).catch(() => {});
 
         const chunkId = `${jobRec.fileSha256}/pages@${i}`;
         const pageNumber = i + 1;
@@ -568,7 +594,7 @@ async function processPdfDocument(jobRec, tmpPdfPath) {
       jobRec.pages_converted = i + 1;
     }
 
-    await fs.promises.unlink(tmpPdfPath).catch(() => {});
+    await deps.unlinkFile(tmpPdfPath).catch(() => {});
 
     const combinedContent = allTextPieces.join(
       jobRec.page_numbering ? "\n\n<!-- page boundary -->\n\n" : "\n\n"

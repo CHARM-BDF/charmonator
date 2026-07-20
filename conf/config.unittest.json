@@ -65,6 +65,33 @@
       "temperature": 0.8,
       "context_size": 8192,
       "output_limit": 2048
+    },
+    "test-policy-conversion-image-content-filter": {
+      "api": "TestPolicy",
+      "model_type": "chat",
+      "test_policy_response_mode": "conversion/image",
+      "test_policy_error": {
+        "provider": "openai",
+        "message": "image blocked by content safety",
+        "interpretedErrorType": "content_filter_violation",
+        "interpretedCode": 422,
+        "interpretedMessage": "Content was filtered due to policy violations. Please try with different content."
+      }
+    },
+    "test-policy-conversion-image-page-loopback": {
+      "api": "TestPolicy",
+      "model_type": "chat",
+      "test_policy_response_mode": "conversion/image",
+      "test_policy_markdown_from_image": true,
+      "test_policy_markdown_prefix": "transcribed:",
+      "test_policy_error_if_image_includes": "mock-page-2.png",
+      "test_policy_error": {
+        "provider": "openai",
+        "message": "image blocked by content safety",
+        "interpretedErrorType": "content_filter_violation",
+        "interpretedCode": 422,
+        "interpretedMessage": "Content was filtered due to policy violations."
+      }
     }
   }
 }
