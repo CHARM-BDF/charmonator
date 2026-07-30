@@ -944,10 +944,11 @@ async function getNondefective(chatModel, prefixFrag, options) {
 export async function callLLM(chatModel, minimalTranscript, options = {}) {
   console.log("minimalTranscript:", minimalTranscript);
   const schema = options?.response_format?.json_schema?.schema || null;
+  const schemaRepairEnabled = schema && options.num_schema_repair_max_attempts != null;
   let prefixFrag = new TranscriptFragment(
     minimalTranscript.map(m => new Message(m.role, m.content))
   );
-  let numleftSchema = schema ? resolveSchemaRepairAttemptCount(options) : 0;
+  let numleftSchema = schemaRepairEnabled ? resolveSchemaRepairAttemptCount(options) : 0;
   let mostValidOutput = null;
   let finalResponse = null;
 
@@ -963,7 +964,7 @@ export async function callLLM(chatModel, minimalTranscript, options = {}) {
       ex.interpretedMessage = 'An error occurred while processing your request.';
       throw ex
     }
-    if (!schema) {
+    if (!schemaRepairEnabled) {
       return lastMsg.content;
     }
 

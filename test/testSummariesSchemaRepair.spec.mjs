@@ -176,6 +176,34 @@ tags().describe('Summaries schema repair', function() {
     assert.match(secondCallMessages[3].content, /must be string/);
   });
 
+  it('should pass through schema-invalid structured summary replies when repair attempts are unset', async function() {
+    const schema = {
+      type: 'object',
+      properties: {
+        summary: { type: 'string' }
+      },
+      required: ['summary'],
+      additionalProperties: false
+    };
+    const chatModel = new FakeChatModel([
+      JSON.stringify({})
+    ]);
+    const options = buildStructuredOutputOptions(
+      { jsonSchema: schema },
+      {
+        num_defective_reply_max_attempts: 0
+      }
+    );
+
+    const reply = await callLLM(chatModel, [
+      { role: 'system', content: 'You are a summarizer.' },
+      { role: 'user', content: 'Summarize the document.' }
+    ], options);
+
+    assert.equal(reply, '{}');
+    assert.equal(chatModel.calls.length, 1);
+  });
+
   it('should throw a structured provider exception when schema validation is exhausted', async function() {
     const schema = {
       type: 'object',
@@ -317,6 +345,68 @@ tags().describe('Summaries schema repair', function() {
         mostValidOutput: {},
         finalResponse: '{}'
       });
+    } finally {
+      await stopServer(server.child);
+      await fs.rm(generatedConfigDir, { recursive: true, force: true });
+    }
+  });
+
+  it('should complete and store schema-invalid structured summaries when repair attempts are unset', async function() {
+    await writeGeneratedConfig();
+    const server = await startServer();
+    const url = `http://localhost:${TEST_PORT}/api/charmonizer/v1/summaries`;
+
+    try {
+      const submitResponse = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          document: {
+            id: 'schema-pass-through-doc',
+            content: 'This content is not important for the fake provider.'
+          },
+          method: 'full',
+          model: 'schema-repair-test-model',
+          guidance: 'Return a summary object.',
+          json_schema: {
+            type: 'object',
+            properties: {
+              summary: { type: 'string' }
+            },
+            required: ['summary'],
+            additionalProperties: false
+          },
+          num_defective_reply_max_attempts: 0
+        })
+      });
+      assert.equal(submitResponse.status, 202);
+
+      const { job_id: jobId } = await submitResponse.json();
+      assert.equal(typeof jobId, 'string');
+
+      const statusUrl = `${url}/${jobId}`;
+      const resultUrl = `${url}/${jobId}/result`;
+      let statusJson = null;
+
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const statusResponse = await fetch(statusUrl);
+        statusJson = await statusResponse.json();
+        if (statusJson.status === 'complete') {
+          break;
+        }
+        if (statusJson.status === 'error') {
+          assert.fail(`Expected completion, got schema-validation exhaustion: ${JSON.stringify(statusJson)}`);
+        }
+        await sleep(100);
+      }
+
+      assert.equal(statusJson?.status, 'complete');
+
+      const resultResponse = await fetch(resultUrl);
+      const resultJson = await resultResponse.json();
+
+      assert.equal(resultResponse.status, 200);
+      assert.deepEqual(resultJson.annotations.summary, {});
     } finally {
       await stopServer(server.child);
       await fs.rm(generatedConfigDir, { recursive: true, force: true });
