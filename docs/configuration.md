@@ -74,10 +74,10 @@ Aliases are resolved recursively, and circular references are detected and will 
   - If specified in a model, model value overrides the global value.
 
 - num_schema_repair_max_attempts
-  - Maximum number of follow-up schema-repair attempts to allow after a structured JSON answer fails schema validation.
+  - Enables schema repair and sets the number of repair attempts to allow after a structured JSON answer fails schema validation.  When enabled and a `json_schema` is set, charmonator will not return invalid data with status 200.  It will retry `num_schema_repair_max_attempts` times, and if unsuccessful, will return status 422, and the error payload will contain the most valid attempt attained.  Default value of num_schema_repair_max_attempts="null" disables schema repair and passes through with status 200 any schema-invalid payloads from an LLM.
   - This applies to schema-repair flows driven by transcript extension requests that use `response_format.type = "json_schema"`, and to `/api/charmonizer/v1/summaries` jobs that set `json_schema`.
   - If specified in a model, model value overrides the global value.
-  - If omitted from a model, configuration loading fills it from the top-level value or `2`.
+  - If specified in a request, request value overrides model and global values.
 
 - num_defective_reply_max_attempts (rare to change)
   - Very occasionally (less than 1 in 10000 calls), some providers will respond to a request without emitting any messages at all, not even empty ones.  We call this a "defective" response.
