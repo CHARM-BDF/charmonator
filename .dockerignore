@@ -1,0 +1,19 @@
+# Keep the build context free of secrets, PHI and local state.
+.git
+.github
+node_modules
+uploads
+test
+docs
+scripts
+defunct
+*~
+*.log
+.env
+.env.*
+# Local configuration and secrets are mounted or injected at run time, never baked in.
+conf/config.json
+conf/*.secret.json
+conf/config.unittest*.json
+**/.DS_Store
+eng.traineddata
