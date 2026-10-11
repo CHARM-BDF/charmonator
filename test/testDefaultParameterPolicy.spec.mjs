@@ -294,6 +294,8 @@ async function startServer(configCase) {
     cwd: repoRoot,
     env: {
       ...process.env,
+      // Each child uses the port from its generated config, not a CHARMONATOR_PORT override.
+      CHARMONATOR_PORT: '',
       CHARMONATOR_CONFIG: configCase.path
     },
     stdio: ['ignore', 'pipe', 'pipe']

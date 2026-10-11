@@ -3,7 +3,7 @@ import { strict as assert } from 'assert';
 import fetch from 'node-fetch';
 import { useManagedServerFixture } from './support/managed-server-fixture.mjs';
 
-const __port = 5003;
+const __port = Number(process.env.CHARMONATOR_PORT) || 5003;
 const mymodel = 'my-unittest-model';
 const baseCharmonatorUrl = `http://localhost:${__port}/api/charmonator/v1`;
 

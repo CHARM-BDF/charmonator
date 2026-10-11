@@ -5,7 +5,7 @@ import fetch from 'node-fetch';
 import { useManagedServerFixture } from './support/managed-server-fixture.mjs';
 
 // Use the same port as other tests
-const __port = 5003;
+const __port = Number(process.env.CHARMONATOR_PORT) || 5003;
 const baseCharmonatorUrl = `http://localhost:${__port}/api/charmonator/v1`;
 const timeoutMargin = 5;
 
