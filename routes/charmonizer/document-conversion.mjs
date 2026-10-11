@@ -16,6 +16,16 @@ import { imageToMarkdown } from '../../lib/core.mjs';
 import { scrutinizeViaDiff2 } from '../../lib/scrutinize.mjs';
 import { jsonSafeFromException, ProviderException } from '../../lib/providers/provider_exception.mjs';
 import { summarizeBody } from '../../lib/log-safety.mjs';
+import {
+  CACHE_FORMAT,
+  computeCacheKey,
+  getCacheStore,
+  normalizeConversionOptions,
+  resolveCachePolicy
+} from '../../lib/result-cache.mjs';
+
+// Upper bound on replay_pace_ms (10 minutes per page).
+const MAX_REPLAY_PACE_MS = 600000;
 
 function buildPdfProcessingDeps() {
   return {
@@ -232,10 +242,15 @@ const router = express.Router();
  *  - "detect_document_boundaries" => string "true" or "false", default "false"
  *  - "describe" => string "true" or "false" (optional, default "true")
  *  - "tags" => object (optional)
+ *  - "cache" => "use" | "refresh" | "off" (optional; multipart/JSON field or ?cache= query).
+ *               Default "off", or "use" when env CHARMD_CACHE=on. See PCX.md.
+ *  - "replay_pace_ms" => integer ms per page (optional). Only on a cache hit: pages are
+ *               revealed one every replay_pace_ms, then the job completes.
  *
  * Returns { job_id }, which can be polled:
  *  GET /documents/:jobId
  *  GET /documents/:jobId/result
+ *  GET /documents/:jobId/pages?after=N   (pages completed so far; live, cached or replayed)
  */
 router.post('/documents', upload.single('file'), async (req, res) => {
   console.log(JSON.stringify({
@@ -304,6 +319,32 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'Currently only PDF or DOCX are supported.' });
     }
 
+    // Cache / replay options (additive; absent => main's behaviour).
+    const cacheResolution = resolveCachePolicy(req.body.cache ?? req.query.cache);
+    if (cacheResolution.error) {
+      return res.status(400).json({ error: cacheResolution.error });
+    }
+    let cachePolicy = cacheResolution.policy;
+    if (cachePolicy !== 'off' && !getCacheStore()) {
+      if (cacheResolution.explicit) {
+        return res.status(400).json({
+          error: 'cache requested but no cache store is configured (set CHARMD_CACHE_DIR or CHARMD_CACHE_S3_URI)'
+        });
+      }
+      console.warn('[cache] CHARMD_CACHE=on but no cache store configured; continuing without cache');
+      cachePolicy = 'off';
+    }
+    const replayRaw = req.body.replay_pace_ms ?? req.query.replay_pace_ms;
+    let replayPaceMs = null;
+    if (replayRaw !== undefined && replayRaw !== null && replayRaw !== '') {
+      replayPaceMs = Number(replayRaw);
+      if (!Number.isInteger(replayPaceMs) || replayPaceMs < 0 || replayPaceMs > MAX_REPLAY_PACE_MS) {
+        return res.status(400).json({
+          error: `replay_pace_ms must be an integer between 0 and ${MAX_REPLAY_PACE_MS}`
+        });
+      }
+    }
+
     // Compute SHA-256
     const sha256sum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
@@ -326,11 +367,22 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       tags,
       // store filename/path
       originatingFilename,
-      originatingFilepath
+      originatingFilepath,
+      cachePolicy,
+      replayPaceMs
     });
 
+    if (cachePolicy !== 'off') {
+      jobRec.cacheKey = computeCacheKey({
+        fileBuffer,
+        options: normalizeConversionOptions(jobRec),
+        model: jobRec.model
+      });
+      jobRec.cacheInfo = { policy: cachePolicy, key: jobRec.cacheKey, hit: null, stored: false };
+    }
+
     // Kick off async
-    processDocumentAsync(jobRec).catch(err => {
+    runConversionJob(jobRec).catch(err => {
       jobRec.status = 'error';
       const j = jsonSafeFromException(err)
       console.error({"event":"processDocumentAsync error",
@@ -361,13 +413,63 @@ router.get('/documents/:jobId', (req, res) => {
   if (!job) {
     return res.status(404).json({ error: 'No such job_id' });
   }
-  res.json({
+  refreshReplay(job);
+  const body = {
     job_id: job.id,
     status: job.status,
     error: job.error,
     createdAt: job.createdAt,
     pages_total: job.pages_total,
     pages_converted: job.pages_converted
+  };
+  // Extra fields only when the request opted into the cache, so the response
+  // shape is unchanged for callers that do not use it.
+  if (job.cacheInfo) {
+    body.cache = { ...job.cacheInfo };
+    body.replay_pace_ms = job.replay ? job.replay.paceMs : null;
+  }
+  res.json(body);
+});
+
+/**
+ * GET /conversions/documents/:jobId/pages?after=N[&limit=M]
+ *
+ * Page chunks completed so far, for live, cached and replayed jobs alike.
+ * `after=N` skips the first N pages (pages are 1-based, so it returns page N+1 on).
+ * Each page has the same shape as an entry of the final result's chunks.pages.
+ * Response:
+ *   { job_id, status, pages_total, pages_converted, after, next_after, pages: [...] }
+ * Poll with after=next_after until status is "complete" (or "error") and no pages remain.
+ */
+router.get('/documents/:jobId/pages', (req, res) => {
+  const { jobId } = req.params;
+  const job = jobs[jobId];
+  if (!job) {
+    return res.status(404).json({ error: 'No such job_id' });
+  }
+  const after = req.query.after === undefined ? 0 : Number(req.query.after);
+  if (!Number.isInteger(after) || after < 0) {
+    return res.status(400).json({ error: 'after must be a non-negative integer' });
+  }
+  let limit = null;
+  if (req.query.limit !== undefined) {
+    limit = Number(req.query.limit);
+    if (!Number.isInteger(limit) || limit < 1) {
+      return res.status(400).json({ error: 'limit must be a positive integer' });
+    }
+  }
+  refreshReplay(job);
+  const done = pagesSoFar(job);
+  const slice = done.slice(after, limit ? after + limit : undefined);
+  res.json({
+    job_id: job.id,
+    status: job.status,
+    error: job.error,
+    pages_total: job.pages_total,
+    pages_converted: job.pages_converted,
+    after,
+    next_after: after + slice.length,
+    pages: slice
   });
 });
 
@@ -381,6 +483,7 @@ router.get('/documents/:jobId/result', (req, res) => {
   if (!job) {
     return res.status(404).json({ error: 'No such job_id' });
   }
+  refreshReplay(job);
   if (job.status === 'pending' || job.status === 'processing') {
     return res.status(202).json({ status: job.status });
   }
@@ -404,6 +507,129 @@ router.delete('/documents/:jobId', (req, res) => {
   delete jobs[jobId];
   res.json({ success: true });
 });
+
+/**
+ * Pages finished so far for any job: live (still processing), replayed, or complete.
+ */
+function pagesSoFar(job) {
+  if (job.status === 'complete' && job.finalDocObject?.chunks?.pages) {
+    return job.finalDocObject.chunks.pages;
+  }
+  if (job.replay) {
+    return job.replay.pages.slice(0, job.pages_converted || 0);
+  }
+  return job.livePages ? job.livePages.slice(0, job.pages_converted || job.livePages.length) : [];
+}
+
+/**
+ * Advance a replayed job to where its clock says it should be. Page k (1-based)
+ * is revealed at start + k * pace; the job completes once all pages are out.
+ * Computed on read, so no timers are left running.
+ */
+function refreshReplay(job, now = Date.now()) {
+  const r = job.replay;
+  if (!r || r.done) return;
+  const total = r.pages.length;
+  const revealed = r.paceMs > 0
+    ? Math.min(total, Math.floor((now - r.startedAt) / r.paceMs))
+    : total;
+  job.pages_converted = revealed;
+  if (revealed >= total) {
+    job.finalDocObject = r.doc;
+    job.status = 'complete';
+    r.done = true;
+  }
+}
+
+/**
+ * Re-label a cached result with this request's filename: everything else in a
+ * cached result is a function of the cache key, but the filename is not part of it.
+ */
+function retargetFilename(doc, newName) {
+  const copy = JSON.parse(JSON.stringify(doc));
+  const oldName = copy?.metadata?.originating_filename ?? '';
+  if (oldName === newName) return copy;
+  const oldLine = `<!-- METADATA originating_filename: ${oldName} -->`;
+  const newLine = `<!-- METADATA originating_filename: ${newName} -->`;
+  const fix = str => (typeof str === 'string' ? str.split(oldLine).join(newLine) : str);
+  if (copy.metadata) copy.metadata.originating_filename = newName;
+  copy.content = fix(copy.content);
+  for (const page of copy?.chunks?.pages || []) {
+    if (page.metadata && 'originating_filename' in page.metadata) {
+      page.metadata.originating_filename = newName;
+    }
+    page.content = fix(page.content);
+  }
+  return copy;
+}
+
+function shortKey(key) {
+  return key ? key.slice(0, 12) : null;
+}
+
+/**
+ * Serve a job from cache if its policy allows and the entry exists; otherwise
+ * convert it live and (policy "use" or "refresh") store the result.
+ */
+async function runConversionJob(jobRec) {
+  if (jobRec.cachePolicy === 'use') {
+    let entry = null;
+    try {
+      entry = await getCacheStore().get(jobRec.cacheKey);
+    } catch (err) {
+      console.warn(JSON.stringify({ event: 'cache lookup failed', key: shortKey(jobRec.cacheKey), err: err?.name }));
+    }
+    if (entry && entry.format === CACHE_FORMAT && entry.result) {
+      const doc = retargetFilename(entry.result, jobRec.originatingFilename || '');
+      const pages = doc?.chunks?.pages || [];
+      jobRec.cacheInfo.hit = true;
+      jobRec.fileBuffer = null;
+      jobRec.pages_total = pages.length;
+      console.log(JSON.stringify({
+        event: 'cache hit', key: shortKey(jobRec.cacheKey), pages: pages.length, replay_pace_ms: jobRec.replayPaceMs
+      }));
+      if (jobRec.replayPaceMs) {
+        jobRec.status = 'processing';
+        jobRec.pages_converted = 0;
+        jobRec.replay = { startedAt: Date.now(), paceMs: jobRec.replayPaceMs, pages, doc, done: false };
+        refreshReplay(jobRec);
+      } else {
+        jobRec.pages_converted = pages.length;
+        jobRec.finalDocObject = doc;
+        jobRec.status = 'complete';
+      }
+      return;
+    }
+    jobRec.cacheInfo.hit = false;
+    console.log(JSON.stringify({ event: 'cache miss', key: shortKey(jobRec.cacheKey) }));
+  } else if (jobRec.cachePolicy === 'refresh') {
+    jobRec.cacheInfo.hit = false;
+  }
+
+  await processDocumentAsync(jobRec);
+
+  if (jobRec.cachePolicy === 'use' || jobRec.cachePolicy === 'refresh') {
+    const doc = jobRec.finalDocObject;
+    // Only clean, complete results are cached; partial/failed transcriptions
+    // (continue_on_failure placeholders) would otherwise replay forever.
+    if (jobRec.status === 'complete' && doc && !doc.metadata?.transcription_status) {
+      try {
+        await getCacheStore().put(jobRec.cacheKey, {
+          format: CACHE_FORMAT,
+          key: jobRec.cacheKey,
+          created_at: new Date().toISOString(),
+          model: jobRec.model,
+          pages_total: doc.chunks?.pages?.length ?? null,
+          result: doc
+        });
+        jobRec.cacheInfo.stored = true;
+        console.log(JSON.stringify({ event: 'cache store', key: shortKey(jobRec.cacheKey) }));
+      } catch (err) {
+        console.warn(JSON.stringify({ event: 'cache store failed', key: shortKey(jobRec.cacheKey), err: err?.name }));
+      }
+    }
+  }
+}
 
 /**
  * processDocumentAsync => For PDF or DOCX:
@@ -452,6 +678,8 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
     let chunkPages = [];
     let allTextPieces = [];
     let currentStart = 0;
+    // Exposed for GET /documents/:jobId/pages while the job is still running.
+    jobRec.livePages = chunkPages;
 
     let previousPageImageDataUrl = null;
 
@@ -701,6 +929,7 @@ async function processDocxDocument(jobRec) {
     let chunkPages = [];
     let allTextPieces = [];
     let currentStart = 0;
+    jobRec.livePages = chunkPages;
 
     for (let i = 0; i < pages.length; i++) {
       const pageText = pages[i].trim();

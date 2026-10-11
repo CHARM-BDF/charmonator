@@ -18,6 +18,7 @@
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.26.4",
     "@anthropic-ai/sdk": "^0.31.0",
+    "@aws-sdk/client-s3": "^3.948.0",
     "@aws-sdk/credential-providers": "^3.948.0",
     "@babel/parser": "^7.26.5",
     "@babel/traverse": "^7.26.5",
