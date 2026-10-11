@@ -9,6 +9,7 @@
 
 import { strict as assert } from 'assert';
 import http from 'http';
+import fs from 'fs';
 import fetch from 'node-fetch';
 import { useManagedServerFixture } from './support/managed-server-fixture.mjs';
 import { getConfig } from '../lib/config.mjs';
@@ -136,6 +137,8 @@ async function exerciseContentPaths() {
   });
   assert.equal(conv.status, 200, JSON.stringify(conv.body));
   await waitForJob(`${charmonizer}/conversions/documents/${conv.body.job_id}`);
+  // The route leaves its temp copy behind when PDF parsing fails; remove it.
+  await fs.promises.unlink(`uploads/${conv.body.job_id}.pdf`).catch(() => {});
 
   const doc = {
     id: 'doc-sentinel',
