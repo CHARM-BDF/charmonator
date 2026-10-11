@@ -14,6 +14,7 @@ import { TranscriptFragment, Message, ImageAttachment } from '../lib/transcript.
 // [ADDED for .doc.json support]
 import { JSONDocument } from '../lib/json-document.mjs';
 import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
+import { summarizeBody, debugTranscriptsEnabled } from '../lib/log-safety.mjs';
 
 /**
  * Helper function to remove or mask large data URLs
@@ -118,7 +119,8 @@ router.post('/image', async (req, res) => {
   console.log("[POST] /conversion/image  -- converting image to markdown");
 
   // Mask data URLs in request body before logging
-  const safeRequestBody = maskDataUrls(req.body);
+  // Without CHARMONATOR_DEBUG_TRANSCRIPTS only field names and sizes are logged.
+  const safeRequestBody = debugTranscriptsEnabled() ? maskDataUrls(req.body) : summarizeBody(req.body);
   console.log("Request body (masked) =>", safeRequestBody);
 
   try {

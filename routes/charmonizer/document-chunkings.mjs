@@ -4,6 +4,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { JSONDocument } from '../../lib/json-document.mjs';
 import { jsonSafeFromException } from '../../lib/providers/provider_exception.mjs';
+import { summarizeBody } from '../../lib/log-safety.mjs';
 
 /**
  * In-memory store for chunking jobs.
@@ -164,7 +165,7 @@ router.post('/', async (req, res) => {
   console.log(JSON.stringify({
     "event":"request",
     "url":"/chunkings"+req.url,
-    "body":req.body}))
+    "body":summarizeBody(req.body)}))
   try {
     const {
       document,

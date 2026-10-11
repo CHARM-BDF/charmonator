@@ -9,6 +9,7 @@ import { getConfig } from '../../lib/config.mjs';
 import { Message, TranscriptFragment } from '../../lib/transcript.mjs';
 import { isTranscriptMessageDefective } from '../../lib/transcript-extension.mjs';
 import { requestToRepair, validateAgainstSchema } from '../../lib/schema-validation.mjs';
+import { summarizeBody, logContent } from '../../lib/log-safety.mjs';
 
 /**
  * We'll store summarization jobs in memory. For production, use a DB or persistent store.
@@ -214,7 +215,7 @@ async function processSummarizeAsync(job) {
 
   console.log(`Starting summarization job ${job.id} with method ${job.method}...`);
   console.log(`  - Document ID: ${topDoc._doc.id || '(no-id)'}`);
-  console.log("job:", job); 
+  logContent("job:", job);
 
   try {
     switch (job.method) {
@@ -942,7 +943,7 @@ async function getNondefective(chatModel, prefixFrag, options) {
  */
 
 export async function callLLM(chatModel, minimalTranscript, options = {}) {
-  console.log("minimalTranscript:", minimalTranscript);
+  logContent("minimalTranscript:", minimalTranscript);
   const schema = options?.response_format?.json_schema?.schema || null;
   const schemaRepairEnabled = schema && options.num_schema_repair_max_attempts != null;
   let prefixFrag = new TranscriptFragment(
@@ -1024,7 +1025,7 @@ router.post('/', async (req, res) => {
   console.log(JSON.stringify({
     "event":"request",
     "url":"/summaries"+req.url,
-    "body":req.body}))
+    "body":summarizeBody(req.body)}))
   try {
     let {
       document,

@@ -15,6 +15,7 @@ import pdfParse from 'pdf-parse';
 import { imageToMarkdown } from '../../lib/core.mjs';
 import { scrutinizeViaDiff2 } from '../../lib/scrutinize.mjs';
 import { jsonSafeFromException, ProviderException } from '../../lib/providers/provider_exception.mjs';
+import { summarizeBody } from '../../lib/log-safety.mjs';
 
 function buildPdfProcessingDeps() {
   return {
@@ -240,7 +241,7 @@ router.post('/documents', upload.single('file'), async (req, res) => {
   console.log(JSON.stringify({
     "event":"request",
     "url":"/documents"+req.url,
-    "body":req.body}))
+    "body":summarizeBody(req.body)}))
   try {
     const {
       ocr_threshold = 0.7,
