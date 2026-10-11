@@ -249,7 +249,11 @@ Example:
          - aws_region: AWS region (e.g., "us-east-1")
          - aws_access_key: AWS access key ID
          - aws_secret_key: AWS secret access key
+         - aws_session_token: (optional) session token for temporary static credentials
+         - aws_profile: (optional) named AWS profile, including SSO profiles
+         - aws_auth: (optional) "static" | "profile" | "default_chain" to force a mode
          - model: Bedrock model ID (e.g., "us.anthropic.claude-3-5-haiku-20241022-v1:0")
+         - All aws_* strings support ${ENV_VAR} interpolation; see "Bedrock authentication" below.
 
        - Google-specific:
          - model: the Gemini model name (e.g. "gemini-2.0-flash", "gemini-1.5-pro")
@@ -485,6 +489,43 @@ Here:
 - `aws_access_key`: your AWS access key ID.
 - `aws_secret_key`: your AWS secret access key.
 - `model`: the Bedrock model ID (see below for format details).
+
+#### Bedrock authentication
+
+Static keys are one of three ways to authenticate. Accounts that only allow SSO (no long-lived
+keys), and containers running under an ECS task role, use the other two:
+
+| Field | Meaning |
+| --- | --- |
+| `aws_region` | Bedrock region. Unset or empty: the SDK default (`AWS_REGION`, else `us-east-1`). |
+| `aws_access_key`, `aws_secret_key` | Static credentials. Used only when both are non-empty. |
+| `aws_session_token` | Optional session token to accompany temporary static credentials. |
+| `aws_profile` | Named profile from `~/.aws/config`, e.g. an SSO profile (run `aws sso login --profile NAME` first). Resolved with the AWS SDK's `fromIni`, which handles SSO, `role_arn` and `credential_process` profiles. |
+| `aws_auth` | Optional explicit mode: `"static"`, `"profile"` or `"default_chain"`. |
+
+Every one of these strings supports `${ENV_VAR}` interpolation (an unset variable becomes empty).
+
+Without `aws_auth`, the mode is chosen as follows:
+
+1. **static** if `aws_access_key` and `aws_secret_key` are both non-empty (the original behaviour);
+2. **profile** if `aws_profile` is non-empty;
+3. **default_chain** otherwise: no credentials are passed, and the Bedrock SDK uses the AWS
+   default provider chain: environment variables, `AWS_PROFILE`/SSO/ini files, the **ECS task
+   role** (container credentials endpoint), then EC2 instance metadata.
+
+For an ECS task role, configure no keys and no profile:
+
+```jsonc
+"claude-bedrock": {
+  "api": "Anthropic_Bedrock",
+  "model_type": "chat",
+  "aws_region": "${AWS_REGION}",
+  "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+  "temperature": null
+}
+```
+
+For a developer laptop on an SSO-only account, add `"aws_profile": "${AWS_PROFILE}"` (or a literal profile name).
 
 #### Bedrock Model IDs vs. Inference Profiles
 
