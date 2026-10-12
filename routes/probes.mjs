@@ -6,13 +6,16 @@
 //   GET /healthz  200 {status:"ok"} while the process is up and serving.
 //   GET /readyz   200 when the config is loaded and, if a result cache is
 //                 configured (or CHARMD_CACHE=on), the cache store is reachable;
-//                 503 with a reason otherwise.
+//                 503 with a reason otherwise. When any model sets local_only,
+//                 checks.local_only reports each such model, and a model whose
+//                 endpoint is not local makes the service not ready.
 //
 // Neither response contains configuration values, secrets or bucket names.
 
 import express from 'express';
 import { getConfig } from '../lib/config.mjs';
 import { checkCacheReadiness } from '../lib/result-cache.mjs';
+import { checkConfigLocalOnly } from '../lib/local-only.mjs';
 
 const router = express.Router();
 
@@ -39,6 +42,18 @@ router.get('/readyz', async (req, res) => {
   } catch (err) {
     ok = false;
     checks.cache = { ok: false, reason: err?.name || 'Error' };
+  }
+
+  // Only present when some model sets local_only (so main's response is unchanged).
+  try {
+    const localOnly = await checkConfigLocalOnly(getConfig());
+    if (Object.keys(localOnly.models).length > 0) {
+      checks.local_only = localOnly;
+      ok = ok && localOnly.ok;
+    }
+  } catch (err) {
+    ok = false;
+    checks.local_only = { ok: false, reason: err?.name || 'Error' };
   }
 
   res.status(ok ? 200 : 503).json({ status: ok ? 'ready' : 'not_ready', checks });
