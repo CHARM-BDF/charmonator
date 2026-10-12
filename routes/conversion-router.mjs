@@ -5,7 +5,7 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import mammoth from 'mammoth';
-import pdfParse from 'pdf-parse';
+import { parsePdfWithRetry } from '../lib/pdf-parse-retry.mjs';
 import PptxParser from 'node-pptx-parser';
 
 import { fetchChatModel } from '../lib/core.mjs';
@@ -322,7 +322,7 @@ router.post('/file', upload.single('file'), async (req, res) => {
 
     if (ext === '.pdf') {
       const dataBuffer = await fs.promises.readFile(file.path);
-      const pdfData = await pdfParse(dataBuffer);
+      const pdfData = await parsePdfWithRetry(dataBuffer);
       markdownContent = pdfData.text;
     } else if (ext === '.docx') {
       const result = await mammoth.extractRawText({ path: file.path });

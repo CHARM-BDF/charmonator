@@ -9,7 +9,7 @@ import { fromPath as pdf2picFromPath } from 'pdf2pic';
 import { Jimp } from 'jimp';
 import crypto from 'crypto';
 import Tesseract from 'tesseract.js';
-import pdfParse from 'pdf-parse';
+import { parsePdfWithRetry } from '../../lib/pdf-parse-retry.mjs';
 
 // For fallback LLM-based extraction:
 import { imageToMarkdown } from '../../lib/core.mjs';
@@ -29,7 +29,7 @@ const MAX_REPLAY_PACE_MS = 600000;
 
 function buildPdfProcessingDeps() {
   return {
-    parsePdf: fileBuffer => pdfParse(fileBuffer),
+    parsePdf: fileBuffer => parsePdfWithRetry(fileBuffer),
     createPdfConverter: (pdfPath, options) => pdf2picFromPath(pdfPath, options),
     readImage: imagePath => Jimp.read(imagePath),
     ocrPageBuffer,
