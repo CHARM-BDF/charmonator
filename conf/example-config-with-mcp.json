@@ -63,6 +63,44 @@
         "client": [],
         "mcp": ["echo", "calc"]
       }
+    },
+    "local-vision": {
+      "api": "ollama",
+      "model_type": "chat",
+      "host": "http://127.0.0.1:11434",
+      "model": "qwen3-vl:8b-instruct-q4_K_M",
+      "temperature": 0,
+      "num_ctx": 16384,
+      "max_tokens": 8192,
+      "schema_in_prompt": true,
+      "local_only": true
+    },
+    "local-embed": {
+      "api": "ollama",
+      "model_type": "embedding",
+      "host": "http://127.0.0.1:11434",
+      "model": "qwen3-embedding:latest",
+      "local_only": true
+    },
+    "lmstudio-vision": {
+      "api": "OpenAI_Compatible",
+      "model_type": "chat",
+      "base_url": "http://127.0.0.1:1234/v1",
+      "api_key": "${LM_STUDIO_API_KEY}",
+      "model": "google/gemma-4-26b-a4b-qat",
+      "temperature": 0,
+      "max_tokens": 8192,
+      "local_only": "loopback"
+    },
+    "llamacpp-vision": {
+      "api": "OpenAI_Compatible",
+      "model_type": "chat",
+      "base_url": "http://127.0.0.1:8081/v1",
+      "model": "qwen2.5-vl-7b",
+      "temperature": 0,
+      "max_tokens": 8192,
+      "schema_in_prompt": true,
+      "local_only": "loopback"
     }
   },
 

@@ -177,7 +177,7 @@ Example:
 
     - api  (REQUIRED)
       - Which backend to use; must be one of:
-        "OpenAI", "OpenAI_Azure", "Anthropic", "Anthropic_Bedrock", "ollama", "Google"
+        "OpenAI", "OpenAI_Azure", "Anthropic", "Anthropic_Bedrock", "ollama", "OpenAI_Compatible", "Google"
 
     - model_type
       - The broad type of the model’s usage, typically "chat" or "text" or "embedding".
@@ -240,6 +240,12 @@ Example:
 
        - Ollama-specific:
          - host: The host:port for your local Ollama service, e.g. "http://127.0.0.1:11434"
+         - num_ctx, think, keep_alive, ollama_options, max_tokens, schema_in_prompt: optional; see "Local models" below.
+
+       - OpenAI_Compatible-specific (LM Studio, llama.cpp, MLX, vLLM, Ollama /v1):
+         - base_url (required), api_key (optional), and the quirk flags in "Local models" below.
+
+       - local_only (any api): true or "loopback". See "Local models" below.
 
        - Anthropic-specific:
          - model: e.g. "claude-3-5-sonnet-latest"
@@ -612,6 +618,145 @@ Here:
 - `api`: `"ollama"` means local calls to an Ollama server at `host`.
 - `model`: the local model name installed under Ollama.
 - Usually no `api_key` is needed, though you do specify the `host` where Ollama is running.
+
+---
+
+### Local models
+
+charmd can run on local models only, with nothing sent off the machine: a laptop reading a record, or a site without
+cloud access. Two backends cover the local servers:
+
+- `"api": "ollama"`: Ollama's native API (`/api/chat`, `/api/embed`).
+- `"api": "OpenAI_Compatible"`: any server speaking OpenAI Chat Completions and Embeddings at `base_url`: LM Studio,
+  llama.cpp's `llama-server`, `mlx_lm.server` / `mlx_vlm.server`, vLLM, and Ollama's own `/v1`.
+
+`OpenAI_Compatible` is a separate api rather than a `base_url` on `"OpenAI"` because the OpenAI provider guesses from
+the model name (`o*` and `gpt-5*` drop `temperature` and add `reasoning_effort`), sends the system prompt as role
+`developer`, and lets the SDK read `OPENAI_BASE_URL`/`OPENAI_API_KEY` from the environment. None of that is right for a
+local server. `OpenAI_Compatible` guesses nothing: each server quirk is a flag, and it only ever contacts `base_url`.
+There is no fallback to a remote endpoint, and a missing `base_url` is an error.
+
+Both backends send page images as data URLs (Ollama gets the bare base64 it expects), translate `response_format`
+(`json_schema`) to what the server takes, and implement `embed` for `POST /embedding` and charmonizer embeddings.
+
+#### `OpenAI_Compatible` fields
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `base_url` | (required) | e.g. `http://127.0.0.1:1234/v1`. `${ENV}` interpolated. |
+| `api_key` | `"not-needed"` | `${ENV}` interpolated; set it when the server requires a token (LM Studio with auth on). |
+| `model` | (required) | The id the server knows the model by. |
+| `max_tokens` | none | Output cap when a request gives no `max_output_tokens`. Set one: see the note below. |
+| `max_tokens_param` | `"max_tokens"` | `"max_completion_tokens"` for servers that want that name; `"none"` to never send a cap. |
+| `supports_json_schema` | `true` | `false`: send `response_format: {"type":"json_object"}`, put the schema in the prompt, validate the reply here and re-ask (`json_fallback_attempts`, default 2 tries in all). |
+| `json_fallback` | `"json_object"` | `"none"`: with `supports_json_schema: false`, send no `response_format` at all (servers that reject it). |
+| `schema_in_prompt` | `false` | `true`: also state the schema in the last user message when `json_schema` is sent. |
+| `send_strict` | `true` | `false`: drop `json_schema.strict`. |
+| `system_role` | `"system"` | `"developer"` if a server wants it. |
+| `image_detail` | omitted | `"low"`/`"high"`/`"auto"`, sent only if set. |
+| `extra_body` | none | Merged into every chat request, e.g. `{"chat_template_kwargs": {"enable_thinking": false}}` (llama.cpp, vLLM) or `{"reasoning_effort": "low"}` (gpt-oss). OpenAI-only parameters (`reasoning`, `reasoning_effort`, `verbosity`) are never sent unless put here. |
+| `strip_think` | `true` | Remove a leading `<think>...</think>` from replies of servers that inline reasoning. |
+| `embedding_dimensions` | none | Sent as `dimensions` on `/embeddings`. |
+| `ms_client_request_timeout` | 600000 | Per call, as for every model. The SDK's own retries are off; `num_client_request_max_attempts` applies. |
+
+#### Ollama fields (all optional; absent, the request is as on `main`)
+
+`num_ctx` (context window; Ollama's default is often too small for a page image plus prompt), `max_tokens` (sent as
+`num_predict`; a request's `max_output_tokens` is ignored by this provider, as on `main`), `think` (`false` turns reasoning off on thinking models),
+`keep_alive`, `ollama_options` (merged into `options`, e.g. `{"top_k": 20}`), `schema_in_prompt`,
+`embedding_dimensions`. Calls time out after `ms_client_request_timeout` (Node's built-in fetch would give up after
+300 s without response headers, which a non-streamed reply from a slow model can exceed).
+
+#### Set `max_tokens`, and consider `schema_in_prompt`
+
+Local servers generate until the model stops or the cap is hit. Under grammar-constrained decoding (`json_schema`),
+a small model can open a string and never close it: `qwen3-vl:8b` filled one field with 34 KB of text and ran 115 s
+before stopping at `max_tokens: 8192`, and without a cap it ran past five minutes. Stating the schema in the prompt as
+well (`schema_in_prompt: true`, Ollama's own recommendation) fixed it: 0.6 s and a valid object.
+
+#### `local_only`
+
+`"local_only": true` on a model (any api) means its endpoint must resolve to a loopback or private address
+(127/8, ::1, RFC 1918, link-local, 100.64/10, fc00::/7); `"loopback"` allows loopback only. Every address the host
+resolves to must qualify. With a violation, the server refuses to start, each call is refused (HTTP 403,
+`interpretedErrorType: "local_only_violation"`) before anything is sent, and `GET /readyz` reports
+`checks.local_only` and answers 503. Under `local_only`, images must be data URLs, because LM Studio, llama.cpp and
+vLLM will fetch an `http(s)` image URL themselves. Cloud apis (`OpenAI`, `Anthropic`, ...) fail the check by
+definition. The guard catches misconfiguration; it cannot see a proxy, or a "local" server that forwards elsewhere.
+
+#### Examples
+
+```jsonc
+{
+  "models": {
+    // Ollama, native API: vision model for document conversion.
+    "local-vision": {
+      "api": "ollama", "model_type": "chat",
+      "host": "http://127.0.0.1:11434",
+      "model": "qwen3-vl:8b-instruct-q4_K_M",
+      "temperature": 0, "num_ctx": 16384, "max_tokens": 8192, "schema_in_prompt": true,
+      "local_only": true
+    },
+    // Ollama embeddings (e.g. matching findings to HPO terms).
+    "local-embed": {
+      "api": "ollama", "model_type": "embedding",
+      "host": "http://127.0.0.1:11434", "model": "qwen3-embedding:latest", "local_only": true
+    },
+    // Ollama through its OpenAI-compatible /v1.
+    "local-vision-v1": {
+      "api": "OpenAI_Compatible", "model_type": "chat",
+      "base_url": "http://127.0.0.1:11434/v1", "model": "qwen3-vl:8b-instruct-q4_K_M",
+      "temperature": 0, "max_tokens": 8192, "schema_in_prompt": true, "local_only": "loopback"
+    },
+    // LM Studio (`lms server start`, `lms load google/gemma-4-26b-a4b-qat -c 16384`).
+    // With "Require API token" on, put the token in an env var, never in the config.
+    "lmstudio-vision": {
+      "api": "OpenAI_Compatible", "model_type": "chat",
+      "base_url": "http://127.0.0.1:1234/v1", "api_key": "${LM_STUDIO_API_KEY}",
+      "model": "google/gemma-4-26b-a4b-qat",
+      "temperature": 0, "max_tokens": 8192, "local_only": "loopback"
+    },
+    "lmstudio-embed": {
+      "api": "OpenAI_Compatible", "model_type": "embedding",
+      "base_url": "http://127.0.0.1:1234/v1", "api_key": "${LM_STUDIO_API_KEY}",
+      "model": "text-embedding-nomic-embed-text-v1.5", "local_only": "loopback"
+    },
+    // llama.cpp: llama-server -hf ggml-org/Qwen2.5-VL-7B-Instruct-GGUF --host 127.0.0.1 --port 8081 -c 16384 --jinja
+    // (-hf fetches the model and its mmproj once; afterwards it runs offline from the cache.)
+    "llamacpp-vision": {
+      "api": "OpenAI_Compatible", "model_type": "chat",
+      "base_url": "http://127.0.0.1:8081/v1", "model": "qwen2.5-vl-7b",
+      "temperature": 0, "max_tokens": 8192, "schema_in_prompt": true, "local_only": "loopback"
+    },
+    // MLX: mlx_vlm.server --model mlx-community/GLM-4.6V-Flash-bf16 --host 127.0.0.1 --port 8082
+    // mlx_vlm.server accepts response_format but does not enforce it (replies arrive in code fences),
+    // so let charmd put the schema in the prompt and validate.
+    "mlx-vision": {
+      "api": "OpenAI_Compatible", "model_type": "chat",
+      "base_url": "http://127.0.0.1:8082/v1", "model": "mlx-community/GLM-4.6V-Flash-bf16",
+      "temperature": 0, "max_tokens": 8192,
+      "supports_json_schema": false, "json_fallback": "none",
+      "local_only": "loopback"
+    },
+    // vLLM: vllm serve Qwen/Qwen2.5-VL-7B-Instruct --port 8000
+    "vllm-vision": {
+      "api": "OpenAI_Compatible", "model_type": "chat",
+      "base_url": "http://127.0.0.1:8000/v1", "model": "Qwen/Qwen2.5-VL-7B-Instruct",
+      "temperature": 0, "max_tokens": 8192, "local_only": true
+    }
+  }
+}
+```
+
+For document conversion, pass the model name as `model` to `POST /api/charmonizer/v1/conversions/documents`; pages go
+to the vision model when OCR confidence is below `ocr_threshold` (`1.01` sends every page). The server must be bound to
+`127.0.0.1` (as above) for `"loopback"`; Ollama and LM Studio bind there by default, `mlx_vlm.server` binds `0.0.0.0`
+unless told otherwise.
+
+Zero egress also needs the OCR language data on disk. Document conversion runs Tesseract on every page first, and
+tesseract.js downloads `eng.traineddata` from a CDN into the working directory the first time unless the file is
+already there (the `Dockerfile` bakes it in). On a laptop, run one conversion while online, or place the file in
+charmd's working directory, before going offline.
 
 ---
 
