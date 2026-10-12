@@ -295,7 +295,6 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       // capture the provided filename/path
       originatingFilename = req.file.originalname || 'unknown.pdf';
       originatingFilepath = req.file.path;
-      fs.unlink(req.file.path, () => {});
     }
     // 2) Or they provided a base64 pdf_dataurl
     else if (req.body.pdf_dataurl) {
@@ -400,6 +399,12 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       errJson: j
     })
     return res.status(500).json(j);
+  } finally {
+    // The multipart upload (case content) is read into memory above; remove it on every
+    // path, including the early 400s (main removed it only once read).
+    if (req.file?.path) {
+      fs.promises.unlink(req.file.path).catch(() => {});
+    }
   }
 });
 
@@ -641,25 +646,29 @@ async function runConversionJob(jobRec) {
 async function processDocumentAsync(jobRec) {
   jobRec.status = 'processing';
   const tmpPdfPath = path.join('uploads', `${jobRec.id}.pdf`);
-  await fs.promises.writeFile(tmpPdfPath, jobRec.fileBuffer);
+  try {
+    await fs.promises.writeFile(tmpPdfPath, jobRec.fileBuffer);
 
-  // Decide PDF vs DOCX vs error:
-  const mime = jobRec.fileMimetype.toLowerCase();
+    // Decide PDF vs DOCX vs error:
+    const mime = jobRec.fileMimetype.toLowerCase();
 
-  // If it's PDF:
-  if (mime.includes('pdf')) {
-    // Original PDF logic in helper:
-    await processPdfDocument(jobRec, tmpPdfPath);
-  }
-  // If it's .docx:
-  else if (mime.includes('officedocument.wordprocessingml.document')) {
-    await processDocxDocument(jobRec);
-  }
-  else {
-    // Not PDF or DOCX => error out
-    jobRec.status = 'error';
-    jobRec.error = `Unsupported file type: ${jobRec.fileMimetype}`;
-    return;
+    // If it's PDF:
+    if (mime.includes('pdf')) {
+      // Original PDF logic in helper:
+      await processPdfDocument(jobRec, tmpPdfPath);
+    }
+    // If it's .docx:
+    else if (mime.includes('officedocument.wordprocessingml.document')) {
+      await processDocxDocument(jobRec);
+    }
+    else {
+      // Not PDF or DOCX => error out
+      jobRec.status = 'error';
+      jobRec.error = `Unsupported file type: ${jobRec.fileMimetype}`;
+    }
+  } finally {
+    // Written above for every file type; processPdfDocument also removes it.
+    await fs.promises.unlink(tmpPdfPath).catch(() => {});
   }
 }
 
@@ -685,8 +694,12 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
 
     for (let i = 0; i < numPages; i++) {
       let pageChunk;
+      let pagePngPath = null;
       
       try {
+        // Recorded before conversion so a converter that writes the PNG and then throws
+        // still gets it removed; pdf2pic names it <savePath>/<saveFilename>.<page>.<format>.
+        pagePngPath = path.join('uploads', `page_${i}_${jobRec.id}.${i + 1}.png`);
         const converter = deps.createPdfConverter(tmpPdfPath, {
           density: 300,
           saveFilename: `page_${i}_${jobRec.id}`,
@@ -696,6 +709,7 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
           height: 1988
         });
         const output = await converter(i + 1); // pdf2pic is 1-based index
+        if (output?.path) pagePngPath = output.path;
         if (!output?.path) {
           throw new Error(`No path from pdf2pic for page ${i}`);
         }
@@ -761,8 +775,6 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
           isFirstPageDetected = true;
         }
 
-        deps.unlinkFile(output.path).catch(() => {});
-
         const chunkId = `${jobRec.fileSha256}/pages@${i}`;
         const pageNumber = i + 1;
 
@@ -815,6 +827,11 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
           // Re-throw the error to maintain current behavior when flag not set
           throw pageError;
         }
+      } finally {
+        // The page PNG holds case content: remove it whether or not the page succeeded.
+        if (pagePngPath) {
+          Promise.resolve(deps.unlinkFile(pagePngPath)).catch(() => {});
+        }
       }
 
       chunkPages.push(pageChunk);
@@ -822,8 +839,6 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
       currentStart += pageChunk.length;
       jobRec.pages_converted = i + 1;
     }
-
-    await deps.unlinkFile(tmpPdfPath).catch(() => {});
 
     const combinedContent = allTextPieces.join(
       jobRec.page_numbering ? "\n\n<!-- page boundary -->\n\n" : "\n\n"
@@ -905,6 +920,9 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
       })
       jobRec.error = j;
     }
+  } finally {
+    // The temp PDF holds case content: remove it on failure too (main only did on success).
+    await Promise.resolve(deps.unlinkFile(tmpPdfPath)).catch(() => {});
   }
 }
 

@@ -568,11 +568,6 @@ router.post('/file', upload.single('file'), async (req, res) => {
       markdownContent = fileContent;
     }
 
-    // Clean up uploaded file
-    fs.unlink(file.path, (err) => {
-      if (err) console.error(`Failed to delete temp upload file: ${file.path}`, err);
-    });
-
     res.json({ markdownContent });
   } catch (err) {
     const j = jsonSafeFromException(err)
@@ -581,6 +576,11 @@ router.post('/file', upload.single('file'), async (req, res) => {
       errJson: j
     })
     res.status(500).json(j);
+  } finally {
+    // Clean up the uploaded file on failure as well as success (main: success only).
+    fs.unlink(file.path, (err) => {
+      if (err && err.code !== 'ENOENT') console.error(`Failed to delete temp upload file: ${file.path}`, err);
+    });
   }
 });
 
