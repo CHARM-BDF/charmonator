@@ -243,7 +243,7 @@ const router = express.Router();
  *  - "describe" => string "true" or "false" (optional, default "true")
  *  - "tags" => object (optional)
  *  - "cache" => "use" | "refresh" | "off" (optional; multipart/JSON field or ?cache= query).
- *               Default "off", or "use" when env CHARMD_CACHE=on. See PCX.md.
+ *               Default "off", or "use" when env CHARMD_CACHE=on. See docs/api-docs.md.
  *  - "replay_pace_ms" => integer ms per page (optional). Only on a cache hit: pages are
  *               revealed one every replay_pace_ms, then the job completes.
  *

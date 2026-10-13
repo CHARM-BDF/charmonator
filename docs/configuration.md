@@ -303,6 +303,19 @@ If you choose an alternative location for your config.json, config.secret.json w
   - If set, the server will load configuration from that JSON file instead of ./conf/config.json.
   - Example: export CHARMONATOR_CONFIG=/path/to/custom-config.json
 
+Other environment variables:
+
+| Variable | Effect |
+| --- | --- |
+| `CHARMD_CACHE_DIR` | Filesystem cache store (one JSON file per key, mode 0600). |
+| `CHARMD_CACHE_S3_URI` | `s3://bucket/prefix` S3 cache store, via the AWS default credential chain. Wins over `CHARMD_CACHE_DIR`. The role needs `s3:GetObject`, `s3:PutObject` and `s3:ListBucket` (used by `/readyz`). |
+| `CHARMD_CACHE_S3_SSE`, `CHARMD_CACHE_S3_KMS_KEY_ID` | Optional `ServerSideEncryption` (`aws:kms`, `AES256`) and KMS key for puts; unset uses the bucket default. |
+| `CHARMD_CACHE` | `on`: requests without `cache` use `use`. Unset: the cache is off unless a request asks. |
+| `CHARMONATOR_DEBUG_TRANSCRIPTS` | `1` re-enables content logging. Never set it where logs leave the PHI boundary. |
+| `CHARMONATOR_PORT` | Overrides `server.port` (the image sets 8080). |
+| `CHARMONATOR_CONFIG` / `CHARMONATOR_CONFIG_JSON` | Config file path (image default `/app/conf/config.json`, mount it) or the whole config as JSON. |
+
+The cache variables are described with the conversion API in `docs/api-docs.md` › Result cache and replay.
 
 # Examples
 

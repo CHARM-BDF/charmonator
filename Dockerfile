@@ -8,11 +8,12 @@
 # No configuration or credentials are baked in. Provide the config either as a
 # mounted /app/conf/config.json or as CHARMONATOR_CONFIG_JSON; AWS credentials come
 # from the ECS task role (default credential chain). Probes: GET /healthz, GET /readyz.
-# See PCX.md for the cache/replay environment variables.
+# Environment variables: docs/configuration.md › Environment variable override.
 
 # Node.js 22 LTS, Debian bookworm slim, pinned by multi-arch index digest.
-# Not Node 24: pdf-parse's bundled pdf.js 1.10 fails on Node 24 ("bad XRef entry"
-# on valid PDFs), which breaks every PDF conversion.
+# Node 22, not 24: pdf-parse's bundled pdf.js 1.10 misreads pooled Buffers, which
+# Node 24.18+ makes far more common; lib/pdf-parse-retry.mjs works around it, and
+# the image stays on 22 as a second line of defence.
 FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 
 # pdf2pic needs GraphicsMagick + Ghostscript to rasterize PDF pages.

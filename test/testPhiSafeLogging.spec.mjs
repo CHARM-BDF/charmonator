@@ -102,7 +102,7 @@ async function waitForJob(url) {
 }
 
 async function exerciseContentPaths() {
-  // 1) charmonator transcript extension: text + image block (the CHARM-X fax-page read path).
+  // 1) charmonator transcript extension: text + image block (the page-reading path).
   const ext = await postJson(`${charmonator}/transcript/extension`, {
     model: MOCK_MODEL,
     system: `system prompt ${SENTINEL}`,

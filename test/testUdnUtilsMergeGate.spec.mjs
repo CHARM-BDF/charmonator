@@ -1,12 +1,14 @@
-// Merge-back gate (see PCX.md): the endpoints udn-utils calls must stay mounted
-// with the same paths and methods, and a request that uses none of this
-// branch's new options must get the same response as on `main`.
+// udn-utils compatibility gate. The UDN summarizer (udn-summarizer/udn-utils)
+// runs in production against this server, so the endpoints it calls must stay
+// mounted with the same paths and methods, and a request that uses none of the
+// newer options (result cache, replay, pages-so-far) must get the same response,
+// and send the same model requests, as before those options existed.
 //
 // The model is mocked (a loopback HTTP server speaking the Anthropic Messages
 // API) and PDF rasterization/OCR is mocked, so everything is deterministic.
 // Responses, and the requests the mocked model receives, are normalized
 // (UUIDs, timestamps) and compared with test/data/udn-utils-gate.json, which
-// was recorded by running this same file against `main` (911ca84):
+// was recorded by running this same file against `main` (c3b2b8e):
 //
 //   CHARMD_GATE_RECORD=1 mocha test/testUdnUtilsMergeGate.spec.mjs
 //
@@ -34,7 +36,7 @@ const charmonator = `http://localhost:${__port}/api/charmonator/v1`;
 const charmonizer = `http://localhost:${__port}/api/charmonizer/v1`;
 const MOCK_MODEL = 'udn-gate-anthropic-mock';
 
-// The endpoints listed in PCX.md's merge-back gate.
+// The endpoints udn-utils calls.
 const GATE_ENDPOINTS = [
   ['POST', `${charmonator}/transcript/extension`],
   ['GET', `${charmonator}/models`],
@@ -127,7 +129,7 @@ const SYNTHETIC_DOC = {
   }
 };
 
-describe('Merge-back gate: udn-utils endpoints (PCX.md)', function() {
+describe('udn-utils compatibility gate: endpoints', function() {
   this.timeout(30000);
   useManagedServerFixture();
 
