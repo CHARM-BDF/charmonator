@@ -4,7 +4,7 @@ import fetch from 'node-fetch';
 import { useManagedServerFixture } from './support/managed-server-fixture.mjs';
 
 // Use the same port as in other tests
-const __port = 5003;
+const __port = Number(process.env.CHARMONATOR_PORT) || 5003;
 const mymodel = 'my-unittest-model';
 const mymodel_with_mcp = 'my-unittest-with-mcp-model';
 const baseCharmonatorUrl = `http://localhost:${__port}/api/charmonator/v1`;

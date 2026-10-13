@@ -1,0 +1,411 @@
+{
+  "chunking_status": {
+    "body": {
+      "job_id": "<uuid>",
+      "progress": 100,
+      "status": "complete"
+    },
+    "status": 200
+  },
+  "chunking_submit": {
+    "body": {
+      "job_id": "<uuid>",
+      "status": "complete"
+    },
+    "status": 201
+  },
+  "conversion_file": {
+    "body": {
+      "markdownContent": "# Synthetic\n\nA synthetic text file.\n"
+    },
+    "status": 200
+  },
+  "conversion_image": {
+    "body": {
+      "description": "",
+      "isFirstPage": true,
+      "markdown": "# Synthetic page\n\nNo real data."
+    },
+    "status": 200
+  },
+  "conversion_result": {
+    "body": {
+      "chunks": {
+        "pages": [
+          {
+            "content": "<!-- METADATA page_number: 1 -->\n<!-- METADATA text_extraction_method: ocr -->\n<!-- METADATA extraction_confidence: 0.99 -->\n<!-- METADATA model_name: null -->\n<!-- METADATA isFirstPage: true -->\n<!-- METADATA originating_filename: synthetic.pdf -->\n<!-- METADATA originating_file_sha256: 5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac -->\nocr of mock-page-1.png",
+            "id": "5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac/pages@0",
+            "length": 22,
+            "metadata": {
+              "extraction_confidence": 0.99,
+              "isFirstPage": true,
+              "model_name": null,
+              "originating_file_sha256": "5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac",
+              "originating_filename": "synthetic.pdf",
+              "page_number": 1,
+              "text_extraction_method": "ocr"
+            },
+            "parent": "5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac",
+            "start": 0
+          },
+          {
+            "content": "<!-- METADATA page_number: 2 -->\n<!-- METADATA text_extraction_method: vision_model -->\n<!-- METADATA extraction_confidence: 0.9 -->\n<!-- METADATA model_name: udn-gate-anthropic-mock -->\n<!-- METADATA isFirstPage: true -->\n<!-- METADATA originating_filename: synthetic.pdf -->\n<!-- METADATA originating_file_sha256: 5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac -->\n# Synthetic page\n\nNo real data.",
+            "id": "5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac/pages@1",
+            "length": 31,
+            "metadata": {
+              "extraction_confidence": 0.9,
+              "isFirstPage": true,
+              "model_name": "udn-gate-anthropic-mock",
+              "originating_file_sha256": "5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac",
+              "originating_filename": "synthetic.pdf",
+              "page_number": 2,
+              "text_extraction_method": "vision_model"
+            },
+            "parent": "5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac",
+            "start": 22
+          }
+        ]
+      },
+      "content": "<!-- METADATA page_number: 1 -->\n<!-- METADATA text_extraction_method: ocr -->\n<!-- METADATA extraction_confidence: 0.99 -->\n<!-- METADATA model_name: null -->\n<!-- METADATA isFirstPage: true -->\n<!-- METADATA originating_filename: synthetic.pdf -->\n<!-- METADATA originating_file_sha256: 5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac -->\nocr of mock-page-1.png\n\n<!-- page boundary -->\n\n<!-- METADATA page_number: 2 -->\n<!-- METADATA text_extraction_method: vision_model -->\n<!-- METADATA extraction_confidence: 0.9 -->\n<!-- METADATA model_name: udn-gate-anthropic-mock -->\n<!-- METADATA isFirstPage: true -->\n<!-- METADATA originating_filename: synthetic.pdf -->\n<!-- METADATA originating_file_sha256: 5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac -->\n# Synthetic page\n\nNo real data.",
+      "id": "5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac",
+      "metadata": {
+        "document_sha256": "5a99d47edb553e6083164fcd40905c1713c0f993bc0079d916aca23f4640acac",
+        "mimetype": "application/pdf",
+        "originating_filename": "synthetic.pdf",
+        "size_bytes": 27
+      }
+    },
+    "status": 200
+  },
+  "conversion_status": {
+    "body": {
+      "createdAt": "<time>",
+      "error": null,
+      "job_id": "<uuid>",
+      "pages_converted": 2,
+      "pages_total": 2,
+      "status": "complete"
+    },
+    "status": 200
+  },
+  "conversion_submit": {
+    "body": {
+      "job_id": "<uuid>"
+    },
+    "status": 200
+  },
+  "documents": {
+    "body": {
+      "document": {
+        "content": "Synthetic content.",
+        "id": "d0f32ad43b89f73986d445ed6615e8a1e0cef02ede85d5b05692af74545544c2"
+      }
+    },
+    "status": 200
+  },
+  "model_requests": [
+    {
+      "body": {
+        "max_tokens": 1024,
+        "messages": [
+          {
+            "content": [
+              {
+                "text": "[object Object]",
+                "type": "text"
+              },
+              {
+                "source": {
+                  "data": "c3ludGhldGljIHBuZw==",
+                  "media_type": "image/png",
+                  "type": "base64"
+                },
+                "type": "image"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "model": "claude-mock",
+        "stream": false,
+        "system": "You are a helpful assistant."
+      },
+      "method": "POST",
+      "url": "/v1/messages"
+    },
+    {
+      "body": {
+        "max_tokens": 1024,
+        "messages": [
+          {
+            "content": [
+              {
+                "text": "You are an AI that precisely transcribes images into github-formatted markdown under user guidance.\n\nFor text formatted into multiple columns, correctly sequence the content of the columns into the logical order for reading.You also try to determine if the current page is likely the *first page of a document*.\n\nReturn a valid JSON object with keys \"markdown\" (string) and \"isFirstPage\" (boolean).\n\nIf the user requests a description, add a \"description\" field (string) as a short description of the page.\n\nIf the user requests tagging, add a \"tags\" field (array of strings) providing the user-defined tags that \"describe\" this page.\n\nBeyond the image provided, the user may provide additional context to help interpret the image.\n\nThe user may also provide additional instructions on how to interpret graphical content and figures.\n\nDo NOT wrap the JSON in triple backticks. Return ONLY raw JSON.",
+                "type": "text"
+              }
+            ],
+            "role": "assistant"
+          },
+          {
+            "content": [
+              {
+                "text": "Please accurately transcribe this image into well-structured markdown word for word.  Also decide if this is likely the first page of a document. If there are tables, preserve tabular structure using github-formatted-markdown tables when possible. When proper preservation of the structure as a table is not possible, reformat the content to preserve information and understanding as precisely as possible.\n\nOutput must be raw JSON with at least { \"markdown\": \"...\", \"isFirstPage\": ... }\n\n**Context: High-level user-provided description**: A synthetic page.\n\nPlease include a \"description\" field with 1–3 sentences summarizing the page.\nReturn your answer as raw JSON (no code fences), with keys: \"markdown\", \"isFirstPage\", optional \"description\", optional \"tags\".\n",
+                "type": "text"
+              },
+              {
+                "source": {
+                  "data": "c3ludGhldGljIHBuZw==",
+                  "media_type": "image/png",
+                  "type": "base64"
+                },
+                "type": "image"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "model": "claude-mock",
+        "stream": false,
+        "system": "You are a helpful assistant."
+      },
+      "method": "POST",
+      "url": "/v1/messages"
+    },
+    {
+      "body": {
+        "max_tokens": 1024,
+        "messages": [
+          {
+            "content": [
+              {
+                "text": "You are an AI that precisely transcribes images into github-formatted markdown under user guidance.\n\nFor text formatted into multiple columns, correctly sequence the content of the columns into the logical order for reading.You also try to determine if the current page is likely the *first page of a document*.\n\nReturn a valid JSON object with keys \"markdown\" (string) and \"isFirstPage\" (boolean).\n\nIf the user requests a description, add a \"description\" field (string) as a short description of the page.\n\nIf the user requests tagging, add a \"tags\" field (array of strings) providing the user-defined tags that \"describe\" this page.\n\nBeyond the image provided, the user may provide additional context to help interpret the image.\n\nThe user may also provide additional instructions on how to interpret graphical content and figures.\n\nDo NOT wrap the JSON in triple backticks. Return ONLY raw JSON.",
+                "type": "text"
+              }
+            ],
+            "role": "assistant"
+          },
+          {
+            "content": [
+              {
+                "text": "Please accurately transcribe this image into well-structured markdown word for word.  Also decide if this is likely the first page of a document. If there are tables, preserve tabular structure using github-formatted-markdown tables when possible. When proper preservation of the structure as a table is not possible, reformat the content to preserve information and understanding as precisely as possible.\n\nOutput must be raw JSON with at least { \"markdown\": \"...\", \"isFirstPage\": ... }\n\n**Context: High-level user-provided description**: A document page with text and possibly diagrams.\n\n**Context: Intended use of this transcription**: The intended use of this transcription is not specified, so be as precise as possible.\n\nPlease include a \"description\" field with 1–3 sentences summarizing the page.\nReturn your answer as raw JSON (no code fences), with keys: \"markdown\", \"isFirstPage\", optional \"description\", optional \"tags\".\n",
+                "type": "text"
+              },
+              {
+                "source": {
+                  "data": "bW9jay1wYWdlLTIucG5n",
+                  "media_type": "image/png",
+                  "type": "base64"
+                },
+                "type": "image"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "model": "claude-mock",
+        "stream": false,
+        "system": "You are a helpful assistant."
+      },
+      "method": "POST",
+      "url": "/v1/messages"
+    },
+    {
+      "body": {
+        "max_tokens": 1024,
+        "messages": [
+          {
+            "content": [
+              {
+                "text": "\nYou are a document summarization assistant.\n\nThe document has been broken down into chunks.\n\nYou will produce a summary for exactly one chunk.\n\n(You may also be given some preceding chunks for context, and possibly succeeding chunks.)\n\nWhen summarizing, follow the provided guidance.\nIf the user prompt contains <constrant>...</constraint>, follow those instructions as well.\n\n<guidance>\nSummarize.\n</guidance>\n",
+                "type": "text"
+              }
+            ],
+            "role": "assistant"
+          },
+          {
+            "content": [
+              {
+                "text": "## Document ID: udn-gate-synthetic-doc\n## Current chunk metadata:\n{}\n\n## Current chunk:\n<chunk id=\"udn-gate-synthetic-doc/pages@0\">\nSynthetic page one.\n</chunk>",
+                "type": "text"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "model": "claude-mock",
+        "stream": false,
+        "system": "\nYou are a document summarization assistant.\n\nThe document has been broken down into chunks.\n\nYou will produce a summary for exactly one chunk.\n\n(You may also be given some preceding chunks for context, and possibly succeeding chunks.)\n\nWhen summarizing, follow the provided guidance.\nIf the user prompt contains <constrant>...</constraint>, follow those instructions as well.\n\n<guidance>\nSummarize.\n</guidance>\n",
+        "temperature": 0.7
+      },
+      "method": "POST",
+      "url": "/v1/messages"
+    },
+    {
+      "body": {
+        "max_tokens": 1024,
+        "messages": [
+          {
+            "content": [
+              {
+                "text": "\nYou are a document summarization assistant.\n\nThe document has been broken down into chunks.\n\nYou will produce a summary for exactly one chunk.\n\n(You may also be given some preceding chunks for context, and possibly succeeding chunks.)\n\nWhen summarizing, follow the provided guidance.\nIf the user prompt contains <constrant>...</constraint>, follow those instructions as well.\n\n<guidance>\nSummarize.\n</guidance>\n",
+                "type": "text"
+              }
+            ],
+            "role": "assistant"
+          },
+          {
+            "content": [
+              {
+                "text": "## Document ID: udn-gate-synthetic-doc\n## Current chunk metadata:\n{}\n\n## Current chunk:\n<chunk id=\"udn-gate-synthetic-doc/pages@1\">\nSynthetic page two.\n</chunk>",
+                "type": "text"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "model": "claude-mock",
+        "stream": false,
+        "system": "\nYou are a document summarization assistant.\n\nThe document has been broken down into chunks.\n\nYou will produce a summary for exactly one chunk.\n\n(You may also be given some preceding chunks for context, and possibly succeeding chunks.)\n\nWhen summarizing, follow the provided guidance.\nIf the user prompt contains <constrant>...</constraint>, follow those instructions as well.\n\n<guidance>\nSummarize.\n</guidance>\n",
+        "temperature": 0.7
+      },
+      "method": "POST",
+      "url": "/v1/messages"
+    }
+  ],
+  "models": {
+    "body": {
+      "models": [
+        {
+          "context_size": 128000,
+          "deployment": "o3",
+          "description": "",
+          "id": "my-unittest-model",
+          "max_tokens": "",
+          "model": "",
+          "model_type": "chat",
+          "name": "my-unittest-model",
+          "output_limit": 16384,
+          "provider": "OpenAIProvider"
+        },
+        {
+          "context_size": 128000,
+          "deployment": "o3",
+          "description": "",
+          "id": "my-unittest-with-mcp-model",
+          "max_tokens": "",
+          "model": "",
+          "model_type": "chat",
+          "name": "my-unittest-with-mcp-model",
+          "output_limit": 16384,
+          "provider": "OpenAIProvider"
+        },
+        {
+          "context_size": 8192,
+          "deployment": "text-embedding-3-large",
+          "description": "",
+          "id": "my-unittest-emodel",
+          "max_tokens": "",
+          "model": "",
+          "model_type": "chat",
+          "name": "my-unittest-emodel",
+          "output_limit": 2048,
+          "provider": "OpenAIProvider"
+        },
+        {
+          "context_size": "",
+          "deployment": "",
+          "description": "",
+          "id": "test-policy-conversion-image-content-filter",
+          "max_tokens": "",
+          "model": "",
+          "model_type": "chat",
+          "name": "test-policy-conversion-image-content-filter",
+          "output_limit": "",
+          "provider": "TestPolicyProvider"
+        },
+        {
+          "context_size": "",
+          "deployment": "",
+          "description": "",
+          "id": "test-policy-conversion-image-page-loopback",
+          "max_tokens": "",
+          "model": "",
+          "model_type": "chat",
+          "name": "test-policy-conversion-image-page-loopback",
+          "output_limit": "",
+          "provider": "TestPolicyProvider"
+        },
+        {
+          "context_size": "",
+          "deployment": "",
+          "description": "",
+          "id": "udn-gate-anthropic-mock",
+          "max_tokens": 1024,
+          "model": "claude-mock",
+          "model_type": "chat",
+          "name": "udn-gate-anthropic-mock",
+          "output_limit": "",
+          "provider": "AnthropicProvider"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "summary_result": {
+    "body": {
+      "chunks": {
+        "pages": [
+          {
+            "annotations": {
+              "summary": "{\"markdown\":\"# Synthetic page\\n\\nNo real data.\",\"isFirstPage\":true}"
+            },
+            "content": "Synthetic page one.",
+            "id": "udn-gate-synthetic-doc/pages@0",
+            "length": 19,
+            "parent": "udn-gate-synthetic-doc",
+            "start": 0
+          },
+          {
+            "annotations": {
+              "summary": "{\"markdown\":\"# Synthetic page\\n\\nNo real data.\",\"isFirstPage\":true}"
+            },
+            "content": "Synthetic page two.",
+            "id": "udn-gate-synthetic-doc/pages@1",
+            "length": 19,
+            "parent": "udn-gate-synthetic-doc",
+            "start": 21
+          }
+        ],
+        "pages_stats": []
+      },
+      "content": "Synthetic page one.\n\nSynthetic page two.",
+      "id": "udn-gate-synthetic-doc"
+    },
+    "status": 200
+  },
+  "summary_status": {
+    "body": {
+      "chunks_completed": 2,
+      "chunks_total": 2,
+      "status": "complete"
+    },
+    "status": 200
+  },
+  "summary_submit": {
+    "body": {
+      "job_id": "<uuid>"
+    },
+    "status": 202
+  },
+  "transcript_extension": {
+    "body": {
+      "messages": [
+        {
+          "content": "{\"markdown\":\"# Synthetic page\\n\\nNo real data.\",\"isFirstPage\":true}",
+          "role": "assistant"
+        }
+      ]
+    },
+    "status": 200
+  }
+}

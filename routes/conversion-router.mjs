@@ -5,7 +5,7 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import mammoth from 'mammoth';
-import pdfParse from 'pdf-parse';
+import { parsePdfWithRetry } from '../lib/pdf-parse-retry.mjs';
 import PptxParser from 'node-pptx-parser';
 
 import { fetchChatModel } from '../lib/core.mjs';
@@ -14,6 +14,7 @@ import { TranscriptFragment, Message, ImageAttachment } from '../lib/transcript.
 // [ADDED for .doc.json support]
 import { JSONDocument } from '../lib/json-document.mjs';
 import { jsonSafeFromException } from '../lib/providers/provider_exception.mjs';
+import { summarizeBody, debugTranscriptsEnabled } from '../lib/log-safety.mjs';
 
 /**
  * Helper function to remove or mask large data URLs
@@ -118,7 +119,8 @@ router.post('/image', async (req, res) => {
   console.log("[POST] /conversion/image  -- converting image to markdown");
 
   // Mask data URLs in request body before logging
-  const safeRequestBody = maskDataUrls(req.body);
+  // Without CHARMONATOR_DEBUG_TRANSCRIPTS only field names and sizes are logged.
+  const safeRequestBody = debugTranscriptsEnabled() ? maskDataUrls(req.body) : summarizeBody(req.body);
   console.log("Request body (masked) =>", safeRequestBody);
 
   try {
@@ -320,7 +322,7 @@ router.post('/file', upload.single('file'), async (req, res) => {
 
     if (ext === '.pdf') {
       const dataBuffer = await fs.promises.readFile(file.path);
-      const pdfData = await pdfParse(dataBuffer);
+      const pdfData = await parsePdfWithRetry(dataBuffer);
       markdownContent = pdfData.text;
     } else if (ext === '.docx') {
       const result = await mammoth.extractRawText({ path: file.path });
@@ -566,11 +568,6 @@ router.post('/file', upload.single('file'), async (req, res) => {
       markdownContent = fileContent;
     }
 
-    // Clean up uploaded file
-    fs.unlink(file.path, (err) => {
-      if (err) console.error(`Failed to delete temp upload file: ${file.path}`, err);
-    });
-
     res.json({ markdownContent });
   } catch (err) {
     const j = jsonSafeFromException(err)
@@ -579,6 +576,11 @@ router.post('/file', upload.single('file'), async (req, res) => {
       errJson: j
     })
     res.status(500).json(j);
+  } finally {
+    // Clean up the uploaded file on failure as well as success (main: success only).
+    fs.unlink(file.path, (err) => {
+      if (err && err.code !== 'ENOENT') console.error(`Failed to delete temp upload file: ${file.path}`, err);
+    });
   }
 });
 

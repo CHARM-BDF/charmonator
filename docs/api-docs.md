@@ -713,6 +713,64 @@ DELETE api/charmonizer/v1/conversions/documents/{jobId}
   - 400 if file missing/unsupported
   - 500 on internal errors
 
+#### Result cache and replay (optional)
+
+`POST /conversions/documents` accepts two optional fields. Each can be a multipart field, a JSON body field or a
+query parameter:
+
+| Field | Values | Meaning |
+| --- | --- | --- |
+| `cache` | `use`, `refresh`, `off` | `use`: serve from the cache on a hit; on a miss convert live and store the result. `refresh`: always convert live, then overwrite the stored result. `off`: no lookup, no store. Default `off`, or `use` when `CHARMD_CACHE=on`. |
+| `replay_pace_ms` | integer, 0 to 600000 | Only matters on a cache hit: reveal one page every `replay_pace_ms`, then complete. Absent or `0`: a hit completes at once. Ignored when the job converts live. |
+
+Returns `{ "job_id": "..." }`. Errors (400): an unknown `cache` value; `cache` set to `use`/`refresh` with no store
+configured; a `replay_pace_ms` that is not an integer in range.
+
+With the cache in use, `GET /conversions/documents/{jobId}` returns the usual fields (`job_id`, `status`, `error`, `createdAt`, `pages_total`,
+`pages_converted`). When the request opted into the cache (policy `use` or `refresh`) it also returns:
+
+```json
+"cache": { "policy": "use", "key": "<sha256>", "hit": true, "stored": false },
+"replay_pace_ms": 1500
+```
+
+`hit` is `null` until the lookup is done; `stored` turns `true` once a live result has been written to the cache.
+`status` goes `pending` → `processing` → `complete` (or `error`). During replay it is `processing`, `pages_total` is
+the cached page count, and `pages_converted` counts up by one every `replay_pace_ms`; page *k* appears at
+*k* × `replay_pace_ms` after submission. `GET …/{jobId}/result` answers 202 until `complete`, then returns the same
+document object a live conversion returns.
+
+#### Pages so far
+
+`GET /conversions/documents/{jobId}/pages?after=N[&limit=M]` works for live, cached and replayed jobs:
+
+```json
+{ "job_id": "...", "status": "processing", "error": null,
+  "pages_total": 4, "pages_converted": 2,
+  "after": 0, "next_after": 2,
+  "pages": [ { "id": "<sha256>/pages@0", "content": "...", "metadata": { "page_number": 1, ... } }, ... ] }
+```
+
+`after=N` skips the first N pages (default 0); `limit` caps how many are returned. Each page is the same object as an
+entry of the final result's `chunks.pages`. To animate: poll with `after=next_after` until `status` is `complete` and
+`next_after == pages_total` (or `status` is `error`). 400 on a bad `after`/`limit`, 404 on an unknown job.
+
+#### Cache semantics
+
+- Key: sha256 over the file bytes, the normalized conversion options (`ocr_threshold`, `scrutinize`, `page_numbering`,
+  `description`, `intent`, `graphic_instructions`, `detect_document_boundaries`, `describe`, `tags`,
+  `continue_on_failure`, and PDF vs DOCX) and the requested `model` name. Equivalent spellings (`"true"`/`true`,
+  `"0.70"`/`0.7`, omitted/default) share a key. The filename is not part of the key: a hit is re-labelled with the new
+  request's `originating_filename`.
+- Stored: the final document object, whose `chunks.pages` are the per-page outputs. Only clean results are stored; a
+  result with failed pages (`continue_on_failure` placeholders) is never cached.
+- A failed lookup (store unreachable) is treated as a miss; a failed store leaves the job `complete` with
+  `stored: false`. Neither logs content: cache log lines carry a 12-character key prefix only.
+- To pre-warm: convert each document once with `cache=use` (or `refresh`) and check `stored: true`; later requests
+  with `cache=use&replay_pace_ms=...` replay it.
+- **The cache holds transcriptions, so it holds PHI.** The directory or bucket must be inside the same PHI boundary as
+  the service (encrypted, access-controlled, lifecycle-managed).
+
 ---
 
 ### 8. Summarize a Document (Long-Running)
@@ -1061,6 +1119,15 @@ GET api/charmonizer/v1/chunkings/{job_id}/result
 *(Currently, the result is returned in a simplified array form rather than a full [Document Object](#document-object-specification).)*
 
 ---
+
+## Health Probes
+
+- `GET /healthz`: 200 `{"status":"ok"}` while the process serves.
+- `GET /readyz`: 200 `{"status":"ready", "checks": {...}}` when the config is loaded and, if a cache store is
+  configured or `CHARMD_CACHE=on`, the store is reachable, and every `local_only` model's endpoint is local
+  (`checks.local_only`, present only when some model sets it); 503 `{"status":"not_ready"}` otherwise. Both sit at the
+  server root, outside `baseUrl`, and are not request-logged.
+
 
 ## Error Handling
 

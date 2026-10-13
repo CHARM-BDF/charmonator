@@ -2,7 +2,7 @@ import { strict as assert } from 'assert';
 import net from 'net';
 import { createAndStart } from '../lib/server.mjs';
 
-const __port = 5003;
+const __port = Number(process.env.CHARMONATOR_PORT) || 5003;
 
 function failAfter(ms, label) {
   return new Promise((_, reject) => {

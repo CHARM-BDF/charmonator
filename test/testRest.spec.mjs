@@ -11,7 +11,7 @@ import { useManagedServerFixture } from './support/managed-server-fixture.mjs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const __port = 5003;
+const __port = Number(process.env.CHARMONATOR_PORT) || 5003;
 const pdfPath = path.join(__dirname, 'data', 'OMIM_610661.pdf');
 const pngPath = path.join(__dirname, 'data', 'OMIM_610661.png');
 
