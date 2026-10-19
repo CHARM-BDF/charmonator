@@ -313,6 +313,7 @@ Other environment variables:
 | `CHARMD_CACHE` | `on`: requests without `cache` use `use`. Unset: the cache is off unless a request asks. |
 | `CHARMONATOR_DEBUG_TRANSCRIPTS` | `1` re-enables content logging. Never set it where logs leave the PHI boundary. |
 | `CHARMONATOR_PORT` | Overrides `server.port` (the image sets 8080). |
+| `CHARMONATOR_APPS_PATH` | Directories of apps to load in addition to config's `apps`, separated like `PATH`. See `docs/apps.md` › Apps outside the charmd tree. |
 | `CHARMONATOR_CONFIG` / `CHARMONATOR_CONFIG_JSON` | Config file path (image default `/app/conf/config.json`, mount it) or the whole config as JSON. |
 
 The cache variables are described with the conversion API in `docs/api-docs.md` › Result cache and replay.

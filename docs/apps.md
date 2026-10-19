@@ -15,10 +15,10 @@ The app loading system allows you to:
 
 ### App Registration Process
 
-1. **Discovery**: Apps are discovered through the main `config.json` file's `apps` section
+1. **Discovery**: Apps are discovered through the main `config.json` file's `apps` section and on `CHARMONATOR_APPS_PATH` (see [Apps outside the charmd tree](#apps-outside-the-charmd-tree))
 2. **Loading**: The `AppRegistry` class loads each enabled app from its directory
 3. **Configuration**: Apps can have local `app-config.json` files that override global settings
-4. **Route Loading**: Express router files in the `routes/` directory are dynamically imported
+4. **Route Loading**: Route modules in the `routes/` directory are dynamically imported; each exports `createRouter(ctx)` or a default Express router
 5. **Static Serving**: Files in the `public/` directory are served at the app's static route
 6. **Mounting**: All app routes and static files are mounted to the main Express server
 
@@ -101,7 +101,7 @@ my-app/
 
 ### Route Module Format
 
-Route files must export an Express router as the default export:
+A route file exports either `createRouter(ctx)`, which returns (or resolves to) an Express router, or an Express router as its default export. `createRouter` is preferred for new apps and is required for apps outside the charmd tree; see [Apps outside the charmd tree](#apps-outside-the-charmd-tree). The default-export form, shown here, works only for apps under charmd's own directory, because it imports `express` and `lib/` by relative path:
 
 ```javascript
 // routes/main.mjs
@@ -434,6 +434,45 @@ routes/
 
 Each file should export an Express router, and all will be automatically loaded and mounted.
 
+## Apps outside the charmd tree
+
+An app can live in its own repository, outside charmd's directory, e.g. a private app deployed alongside a public charmd.
+
+**Enable it without editing config.** Set `CHARMONATOR_APPS_PATH` to a list of directories separated like `PATH` (`:` on Linux and macOS). A directory holding an `app-config.json` is itself an app; otherwise each of its subdirectories holding an `app-config.json` is. The app's id is its directory name. An app with the same id in `config.json`'s `apps` section wins, so config can still point it elsewhere or turn it off with `"enabled": false`.
+
+```bash
+CHARMONATOR_APPS_PATH=/opt/my-apps node server.mjs     # loads /opt/my-apps/*/
+```
+
+In a container, layer the apps on the charmd image and set the variable:
+
+```dockerfile
+FROM charmd:<sha>
+COPY --chown=10001:10001 apps/ /app/extra-apps/
+ENV CHARMONATOR_APPS_PATH=/app/extra-apps
+```
+
+**Export `createRouter(ctx)`.** An app outside the tree cannot import `express` or charmd's `lib/` by relative path, so charmd passes what it needs:
+
+```javascript
+// routes/v1.mjs
+export function createRouter(ctx) {
+  const router = ctx.express.Router();
+  router.get('/v1/health', (req, res) => res.json({ ok: true, app: ctx.appId }));
+  return router;
+}
+```
+
+| `ctx` field | |
+| --- | --- |
+| `express` | charmd's `express` module |
+| `appId`, `appDir`, `appConfig` | this app's id, directory and merged configuration |
+| `getConfig()` | charmd's configuration |
+| `fetchChatModel(name)` | a configured chat model, as in [Using AI Models](#using-ai-models) |
+| `importCharmd(relPath)` | imports a charmd module by path from the charmd root, e.g. `importCharmd('lib/core.mjs')`. An escape hatch: these paths are not a stable API |
+
+`createRouter` may be `async`. Putting a version in the route paths (`/v1/...`) lets an app change its interface later without breaking clients.
+
 ## Best Practices
 
 1. **Use descriptive app IDs** that won't conflict with other apps
@@ -448,14 +487,15 @@ Each file should export an Express router, and all will be automatically loaded 
 ## Troubleshooting
 
 ### App Not Loading
-- Check that the app is enabled in `config.json`
+- Check that the app is enabled in `config.json`, or that its directory is on `CHARMONATOR_APPS_PATH` and holds an `app-config.json`
 - Verify the directory path is correct
 - Check server logs for error messages
 - Ensure route files export Express routers correctly
 
 ### Routes Not Working
 - Verify route files are in the correct `routes/` directory
-- Check that routes export `default router`
+- Check that routes export `createRouter` or `default router`
+- For an app outside the charmd tree, use `createRouter(ctx)`: a bare `import express from 'express'` will not resolve there
 - Ensure proper error handling in route handlers
 - Check server logs for route mounting messages
 
