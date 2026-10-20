@@ -34,6 +34,8 @@ const state = {
   locating: new Set()   // "doc#page#quote" requests in flight
 };
 
+if (params.get('debug') === '1') window.__provenance = state;   // for inspection only
+
 if (params.get('theme') === 'light' || params.get('theme') === 'dark') {
   document.documentElement.dataset.theme = params.get('theme');
 }
@@ -173,17 +175,25 @@ async function renderImage(doc, page) {
   try {
     const p = await (await pdf).getPage(page);
     if (seq !== state.renderSeq) return;
-    const canvas = $('canvas');
     const base = p.getViewport({ scale: 1 });
     const scale = width / base.width;
     const ratio = window.devicePixelRatio || 1;
     const viewport = p.getViewport({ scale: scale * ratio });
-    canvas.width = Math.floor(viewport.width);
-    canvas.height = Math.floor(viewport.height);
-    canvas.style.width = `${Math.floor(viewport.width / ratio)}px`;
-    state.renderTask = p.render({ canvas, canvasContext: canvas.getContext('2d'), viewport });
+    // Render off screen and swap in when done, so the previous page stays
+    // visible meanwhile (pages change every few seconds while following a job).
+    const off = document.createElement('canvas');
+    off.width = Math.floor(viewport.width);
+    off.height = Math.floor(viewport.height);
+    state.renderTask = p.render({ canvas: off, canvasContext: off.getContext('2d'), viewport });
     await state.renderTask.promise;
-    if (seq === state.renderSeq) state.rendered = key;
+    if (seq !== state.renderSeq) return;
+    const canvas = $('canvas');
+    canvas.width = off.width;
+    canvas.height = off.height;
+    canvas.style.width = `${Math.floor(viewport.width / ratio)}px`;
+    canvas.getContext('2d').drawImage(off, 0, 0);
+    state.rendered = key;
+    renderOverlay(doc, page);
   } catch (err) {
     if (err?.name === 'RenderingCancelledException') return;
     if (seq === state.renderSeq) note.textContent = `Could not render this page (${err.message}).`;
@@ -236,6 +246,8 @@ async function fetchBoxes(doc, page, quotes) {
 function renderOverlay(doc, page) {
   const overlay = $('overlay');
   overlay.replaceChildren();
+  // Boxes belong to the page on the canvas; wait until it is there.
+  if (!String(state.rendered).startsWith(`${doc}:${page}:`)) return;
   const wanted = quotesToBox(doc, page);
   if (!wanted.length || !state.data.documents[doc]?.pdf_url) return;
   const known = state.boxes.get(`${doc}#${page}`) || new Map();
