@@ -173,6 +173,22 @@ describe('tabulate', function () {
     assert.deepEqual(failed.tables.surgery, []);
   });
 
+  it('drops duplicate enum values, and checks the schema before any model call', async function () {
+    const [spec] = normalizeTables([{ name: 't', columns: [{ name: 'x', enum: ['a', 'b', 'a'] }] }]);
+    assert.deepEqual(spec.columns[0].enum, ['a', 'b']);
+    let called = 0;
+    const factory = () => ({ async extendTranscript() { called += 1; throw new Error('unreachable'); } });
+    await assert.rejects(
+      tabulateDocuments({
+        documents: [DOC], chatModelFactory: factory,
+        // Equal objects survive Set-based de-duplication but still make the enum invalid.
+        tables: [{ name: 't', columns: [{ name: 'x', enum: [{ v: 1 }, { v: 1 }] }] }]
+      }),
+      /invalid JSON schema/
+    );
+    assert.equal(called, 0);
+  });
+
   it('requires documents with pages', async function () {
     await assert.rejects(
       tabulateDocuments({ documents: [{ id: 'x' }], tables: TABLES, chatModelFactory: () => ({}) }),
