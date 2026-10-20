@@ -217,6 +217,105 @@ function createJobRecord(extra) {
 }
 
 /**
+ * Create a conversion job record and start converting it. `fields` are the job
+ * record's fields (see the POST handler); `cachePolicy` must already be resolved.
+ * Returns the record and a promise that settles when the job has finished
+ * (status "complete" or "error"); the promise never rejects.
+ */
+function launchConversionJob(fields) {
+  const jobRec = createJobRecord(fields);
+
+  if (jobRec.cachePolicy !== 'off') {
+    jobRec.cacheKey = computeCacheKey({
+      fileBuffer: jobRec.fileBuffer,
+      options: normalizeConversionOptions(jobRec),
+      model: jobRec.model
+    });
+    jobRec.cacheInfo = { policy: jobRec.cachePolicy, key: jobRec.cacheKey, hit: null, stored: false };
+  }
+
+  // Kick off async
+  const done = runConversionJob(jobRec).catch(err => {
+    jobRec.status = 'error';
+    const j = jsonSafeFromException(err)
+    console.error({"event":"processDocumentAsync error",
+      stack: err.stack,
+      errJson: j
+    })
+    jobRec.error = j;
+  });
+  return { jobRec, done };
+}
+
+/**
+ * Convert a document in-process, for apps (see docs/apps.md). Takes the options
+ * of POST /conversions/documents as JavaScript values and resolves to the same
+ * document object GET /documents/:jobId/result returns. The job is an ordinary
+ * conversion job, so GET /documents/:jobId and /pages report on it while it runs;
+ * `onStart(jobId)` is called with its id as soon as it exists.
+ * Rejects with the job's error if conversion fails.
+ */
+export async function convertDocument({
+  fileBuffer,
+  mimetype = 'application/pdf',
+  filename = 'inline_data.pdf',
+  model,
+  ocr_threshold = 0.7,
+  scrutinize = 'none',
+  page_numbering = true,
+  description,
+  intent,
+  graphic_instructions,
+  detect_document_boundaries = false,
+  describe = true,
+  tags = null,
+  continue_on_failure = false,
+  cache,
+  onStart = null
+} = {}) {
+  if (!fileBuffer) throw new Error('convertDocument: fileBuffer is required');
+  if (!model) throw new Error('convertDocument: model is required');
+  const cacheResolution = resolveCachePolicy(cache);
+  if (cacheResolution.error) throw new Error(cacheResolution.error);
+  let cachePolicy = cacheResolution.policy;
+  if (cachePolicy !== 'off' && !getCacheStore()) {
+    if (cacheResolution.explicit) {
+      throw new Error('cache requested but no cache store is configured (set CHARMD_CACHE_DIR or CHARMD_CACHE_S3_URI)');
+    }
+    cachePolicy = 'off';
+  }
+
+  const { jobRec, done } = launchConversionJob({
+    fileBuffer,
+    ocr_threshold: parseFloat(ocr_threshold),
+    scrutinize,
+    model,
+    page_numbering: Boolean(page_numbering),
+    fileMimetype: mimetype,
+    fileSha256: crypto.createHash('sha256').update(fileBuffer).digest('hex'),
+    description,
+    intent,
+    graphic_instructions,
+    detect_document_boundaries: Boolean(detect_document_boundaries),
+    continue_on_failure: Boolean(continue_on_failure),
+    describe: Boolean(describe),
+    tags,
+    originatingFilename: filename,
+    originatingFilepath: null,
+    cachePolicy,
+    replayPaceMs: null
+  });
+  if (onStart) onStart(jobRec.id);
+  await done;
+  if (jobRec.status !== 'complete') {
+    const err = new Error(`conversion failed: ${jobRec.error?.message || jobRec.error?.interpretedMessage || jobRec.status}`);
+    err.details = jobRec.error;
+    throw err;
+  }
+  return jobRec.finalDocObject;
+}
+
+/**
  * Multer setup for file upload
  */
 const upload = multer({
@@ -347,8 +446,7 @@ router.post('/documents', upload.single('file'), async (req, res) => {
     // Compute SHA-256
     const sha256sum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
-    // Create job
-    const jobRec = createJobRecord({
+    const { jobRec } = launchConversionJob({
       fileBuffer,
       ocr_threshold: parseFloat(ocr_threshold),
       scrutinize: scrutinize,
@@ -369,26 +467,6 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       originatingFilepath,
       cachePolicy,
       replayPaceMs
-    });
-
-    if (cachePolicy !== 'off') {
-      jobRec.cacheKey = computeCacheKey({
-        fileBuffer,
-        options: normalizeConversionOptions(jobRec),
-        model: jobRec.model
-      });
-      jobRec.cacheInfo = { policy: cachePolicy, key: jobRec.cacheKey, hit: null, stored: false };
-    }
-
-    // Kick off async
-    runConversionJob(jobRec).catch(err => {
-      jobRec.status = 'error';
-      const j = jsonSafeFromException(err)
-      console.error({"event":"processDocumentAsync error",
-        stack: err.stack,
-        errJson: j
-      })
-      jobRec.error = j;
     });
 
     return res.json({ job_id: jobRec.id });

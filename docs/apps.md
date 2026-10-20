@@ -470,8 +470,19 @@ export function createRouter(ctx) {
 | `getConfig()` | charmd's configuration |
 | `fetchChatModel(name)` | a configured chat model, as in [Using AI Models](#using-ai-models) |
 | `importCharmd(relPath)` | imports a charmd module by path from the charmd root, e.g. `importCharmd('lib/core.mjs')`. An escape hatch: these paths are not a stable API |
+| `importPackage(name)` | imports a package from charmd's own dependencies, e.g. `(await importPackage('multer')).default`, so an app need not install its own copy |
 
 `createRouter` may be `async`. Putting a version in the route paths (`/v1/...`) lets an app change its interface later without breaking clients.
+
+**Helpers for document apps.** Two charmd functions are meant for apps that turn records into structured data:
+
+ - `convertDocument({ fileBuffer, filename, mimetype, model, cache, onStart, ... })` in `routes/charmonizer/document-conversion.mjs` converts a PDF or DOCX in-process, with the options of `POST /conversions/documents` (including the result cache), and resolves to the same document object. The job is an ordinary conversion job: `onStart(jobId)` gets its id, and `GET /conversions/documents/:jobId/pages` shows its progress.
+ - `tabulateDocuments(...)` in `lib/tabulate.mjs` extracts rows for a set of tables from converted documents, tracing every cell to a page and a quote. See [Tabulation](tabulate.md).
+
+```javascript
+const { convertDocument } = await ctx.importCharmd('routes/charmonizer/document-conversion.mjs');
+const { tabulateDocuments } = await ctx.importCharmd('lib/tabulate.mjs');
+```
 
 ## Best Practices
 
