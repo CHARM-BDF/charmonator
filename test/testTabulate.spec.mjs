@@ -241,6 +241,28 @@ describe('tabulate', function () {
     }
   });
 
+  it('retries a window after a transient network error, but not after a validation failure', async function () {
+    let calls = 0;
+    const flaky = () => ({
+      async extendTranscript() {
+        calls += 1;
+        if (calls === 1) throw new TypeError('fetch failed');
+        return new TranscriptFragment([new Message('assistant', JSON.stringify({ surgery: [] }))]);
+      }
+    });
+    const out = await tabulateDocuments({ documents: [{ ...DOC, chunks: { pages: [DOC.chunks.pages[0]] } }],
+      tables: TABLES, chatModelFactory: flaky, retryBaseMs: 1 });
+    assert.deepEqual(out.windows_failed, []);
+    assert.equal(calls, 2);
+
+    calls = 0;
+    const { factory } = stubFactory(() => { calls += 1; return 'not json'; });
+    const bad = await tabulateDocuments({ documents: [{ ...DOC, chunks: { pages: [DOC.chunks.pages[0]] } }],
+      tables: TABLES, chatModelFactory: factory, retryBaseMs: 1 });
+    assert.equal(bad.windows_failed.length, 1);
+    assert.equal(calls, 3, 'one try plus two schema repairs, no transient retries');
+  });
+
   it('requires documents with pages', async function () {
     await assert.rejects(
       tabulateDocuments({ documents: [{ id: 'x' }], tables: TABLES, chatModelFactory: () => ({}) }),
