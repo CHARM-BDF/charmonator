@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document provenance</title>
+  <link rel="stylesheet" href="provenance.css">
+</head>
+<body>
+  <!--
+    An embeddable view of documents and the facts extracted from them, each
+    fact linked to its page and quote. Data comes from ?data=<same-origin URL>
+    in the format described in docs/provenance-viewer.md.
+  -->
+  <header class="bar">
+    <div class="titles">
+      <h1 id="title">Documents</h1>
+      <p id="subtitle"></p>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+    <div class="controls">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-pages" aria-selected="true">Pages</button>
+        <button type="button" role="tab" id="tab-tables" aria-selected="false">Tables</button>
+      </div>
+      <button type="button" id="replay" class="ghost" hidden>Pause</button>
+    </div>
+  </header>
+
+  <p id="error" class="error" hidden></p>
+  <p id="waiting" class="waiting" hidden></p>
+
+  <main id="pages-view" class="pages-view" hidden>
+    <nav id="tray" class="tray" aria-label="Pages"></nav>
+    <section class="page" aria-label="Page">
+      <div class="page-head">
+        <button type="button" class="ghost" id="prev" aria-label="Previous page">&#8249;</button>
+        <span id="page-label"></span>
+        <button type="button" class="ghost" id="next" aria-label="Next page">&#8250;</button>
+      </div>
+      <div class="page-body">
+        <figure class="image" id="image-pane">
+          <canvas id="canvas"></canvas>
+          <figcaption id="image-note"></figcaption>
+        </figure>
+        <div class="text" id="text-pane" tabindex="0" aria-label="Transcription"></div>
+      </div>
+    </section>
+    <aside class="facts" aria-label="Facts on this page">
+      <h2>Found on this page</h2>
+      <ul id="facts"></ul>
+    </aside>
+  </main>
+
+  <main id="tables-view" class="tables-view" hidden></main>
+
+  <ul id="warnings" class="warnings" hidden></ul>
+
+  <script type="module" src="provenance.js"></script>
+</body>
+</html>
