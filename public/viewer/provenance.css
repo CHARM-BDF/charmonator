@@ -141,6 +141,11 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent
 }
 .image { margin: 0; overflow: auto; padding: 12px; border-right: 1px solid var(--line); }
 .image canvas { max-width: 100%; height: auto; background: #fff; border: 1px solid var(--line); display: block; }
+.canvas-wrap { position: relative; display: inline-block; max-width: 100%; }
+.overlay { position: absolute; inset: 0; pointer-events: none; }
+.hl { position: absolute; border-radius: 3px; border: 2px solid var(--mark); background: color-mix(in srgb, var(--mark) 30%, transparent); }
+.hl.active { border-color: var(--mark-active); background: color-mix(in srgb, var(--mark-active) 22%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--mark-active) 35%, transparent); }
+.image.none .canvas-wrap { display: none; }
 .image figcaption { color: var(--muted); font-size: 12px; margin-top: 6px; }
 .image.none canvas { display: none; }
 .text {

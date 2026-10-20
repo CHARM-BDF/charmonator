@@ -3,6 +3,7 @@
 
 import { strict as assert } from 'assert';
 import {
+  createTabulator,
   mergeRows,
   normalizeTables,
   planWindows,
@@ -11,6 +12,7 @@ import {
 } from '../lib/tabulate.mjs';
 import { validateAgainstSchema } from '../lib/schema-validation.mjs';
 import { Message, TranscriptFragment } from '../lib/transcript.mjs';
+import { setCacheStoreForTesting } from '../lib/result-cache.mjs';
 
 const TABLES = [{
   name: 'surgery',
@@ -187,6 +189,56 @@ describe('tabulate', function () {
       /invalid JSON schema/
     );
     assert.equal(called, 0);
+  });
+
+  it('reads windows as pages arrive, reporting each window as it is read', async function () {
+    const { factory } = stubFactory((prompt) => {
+      const [n] = targetPagesOf(prompt);
+      return JSON.stringify({ surgery: n === 1
+        ? [{ surgery_date: '2019-08-21', extent: 'Gross total', evidence: [{ page: 1, quote: 'gross total resection', columns: ['extent'] }] }]
+        : [] });
+    });
+    const seen = [];
+    const tab = createTabulator({ tables: TABLES, chatModelFactory: factory, onWindow: w => seen.push(w) });
+    const doc = { id: 'sha-doc', filename: 'binder.pdf' };
+    tab.addPage(doc, DOC.chunks.pages[0]);
+    tab.addPage(doc, DOC.chunks.pages[1]);
+    await new Promise(r => setTimeout(r, 10));
+    // Both windows were read before the document ended.
+    assert.deepEqual(seen.map(w => w.pages), [[1], [2]]);
+    assert.equal(seen[0].rows.surgery[0].values.extent, 'Gross total');
+    assert.equal(seen[0].cached, false);
+    tab.addPage(doc, DOC.chunks.pages[2]);
+    tab.addPage(doc, DOC.chunks.pages[3]);
+    const out = await tab.finish();
+    assert.equal(out.windows_total, 3);
+    assert.equal(out.tables.surgery.length, 1);
+    assert.throws(() => tab.addPage(doc, DOC.chunks.pages[0]), /finished/);
+  });
+
+  it('answers a window it has read before from the result cache', async function () {
+    const entries = new Map();
+    setCacheStoreForTesting({
+      async get(k) { return entries.get(k) ?? null; },
+      async put(k, v) { entries.set(k, v); },
+      describe() { return { backend: 'memory' }; }
+    });
+    try {
+      const { factory, prompts } = stubFactory(() => JSON.stringify({ surgery: [] }));
+      const options = { documents: [DOC], tables: TABLES, model: 'stub-model', chatModelFactory: factory, cache: 'use' };
+      const windows = [];
+      await tabulateDocuments({ ...options, onWindow: w => windows.push(w.cached) });
+      assert.equal(prompts.length, 3);
+      assert.equal(entries.size, 3);
+      await tabulateDocuments({ ...options, onWindow: w => windows.push(w.cached) });
+      assert.equal(prompts.length, 3, 'no model calls on the second run');
+      assert.deepEqual(windows, [false, false, false, true, true, true]);
+      // A different model name is a different key.
+      await tabulateDocuments({ ...options, model: 'other-model' });
+      assert.equal(prompts.length, 6);
+    } finally {
+      setCacheStoreForTesting(null);
+    }
   });
 
   it('requires documents with pages', async function () {

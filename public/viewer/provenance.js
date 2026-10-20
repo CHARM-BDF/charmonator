@@ -3,9 +3,13 @@
 // Query parameters:
 //   data       same-origin URL of the view JSON (required)
 //   replay_ms  reveal pages one at a time, this many ms apart (a stage replay)
-//   poll_ms    while status is "running", refetch this often (default 3000)
+//   poll_ms    while status is "running", refetch this often (default 3000); pages and
+//              facts that have arrived are shown as they come
 //   doc, page  page to open first (document index from 0, page number)
 //   theme      light | dark
+//   highlight  boxes on the page image, where a document has locate_url:
+//              select (default) for the selected fact or table source only,
+//              auto for every fact on the page, off for none
 
 const params = new URLSearchParams(location.search);
 const $ = id => document.getElementById(id);
@@ -19,11 +23,15 @@ const state = {
   activeQuote: null,    // a quote chosen from the tables view
   tab: 'pages',
   playing: false,
+  follow: false,        // while running: keep showing the newest page
   timer: null,
   pdfs: new Map(),      // document index -> Promise<PDFDocumentProxy>
   renderSeq: 0,
   rendered: null,       // "doc:page:width" now on the canvas
-  renderTask: null
+  renderTask: null,
+  highlight: ['auto', 'select', 'off'].includes(params.get('highlight')) ? params.get('highlight') : 'select',
+  boxes: new Map(),     // "doc#page" -> Map(quote -> box | null)
+  locating: new Set()   // "doc#page#quote" requests in flight
 };
 
 if (params.get('theme') === 'light' || params.get('theme') === 'dark') {
@@ -182,6 +190,70 @@ async function renderImage(doc, page) {
   }
 }
 
+// ---- highlights on the page image -----------------------------------------
+
+// Quotes to box on this page: [{ quote, active }].
+function quotesToBox(doc, page) {
+  if (state.highlight === 'off' || !isRevealed(doc, page)) return [];
+  const out = [];
+  for (const f of factsOn(doc, page)) {
+    const active = f.id === state.activeFact;
+    if (state.highlight === 'auto' || active) for (const q of f.quotes || []) out.push({ quote: q, active });
+  }
+  const aq = state.activeQuote;
+  if (aq && aq.doc === doc && aq.page === page) out.push({ quote: aq.quote, active: true });
+  return out;
+}
+
+async function fetchBoxes(doc, page, quotes) {
+  const d = state.data.documents[doc];
+  const url = sameOriginUrl(d?.locate_url);
+  if (!url) return;
+  const key = `${doc}#${page}`;
+  const known = state.boxes.get(key) || new Map();
+  state.boxes.set(key, known);
+  const missing = [...new Set(quotes)].filter(q => !known.has(q) && !state.locating.has(`${key}#${q}`));
+  if (!missing.length) return;
+  missing.forEach(q => state.locating.add(`${key}#${q}`));
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ document: d.id, page, quotes: missing })
+    });
+    const json = res.ok ? await res.json() : { boxes: [] };
+    for (const q of missing) known.set(q, (json.boxes || []).find(b => b.quote === q.trim())?.box || null);
+  } catch {
+    for (const q of missing) known.set(q, null);
+  } finally {
+    missing.forEach(q => state.locating.delete(`${key}#${q}`));
+  }
+  const at = state.order[state.cursor];
+  if (at && at.doc === doc && at.page === page) renderOverlay(doc, page);
+}
+
+function renderOverlay(doc, page) {
+  const overlay = $('overlay');
+  overlay.replaceChildren();
+  const wanted = quotesToBox(doc, page);
+  if (!wanted.length || !state.data.documents[doc]?.pdf_url) return;
+  const known = state.boxes.get(`${doc}#${page}`) || new Map();
+  for (const { quote, active } of wanted) {
+    const box = known.get(quote);
+    if (!box) continue;
+    const [x0, y0, x1, y1] = box;
+    overlay.append(el('div', {
+      class: `hl${active ? ' active' : ''}`,
+      style: `left:${x0 * 100}%;top:${y0 * 100}%;width:${(x1 - x0) * 100}%;height:${(y1 - y0) * 100}%`
+    }));
+  }
+  const active = overlay.querySelector('.hl.active');
+  if (active) active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const missing = wanted.map(w => w.quote).filter(q => !known.has(q));
+  if (missing.length) fetchBoxes(doc, page, missing);
+}
+
 // ---- rendering -------------------------------------------------------------
 
 function renderStatus() {
@@ -190,7 +262,7 @@ function renderStatus() {
   const facts = (d.facts || []).length;
   let text = `${d.documents.length} document${d.documents.length === 1 ? '' : 's'} · ${pages} pages · ${facts} facts`;
   if (Number.isFinite(state.revealed) && state.revealed < pages) text = `Reading page ${state.revealed + 1} of ${pages}`;
-  if (d.status === 'running') text = d.progress?.label || 'Working…';
+  if (d.status === 'running') text = `${d.progress?.label || 'Working…'} · ${facts} facts so far`;
   if (d.status === 'error') text = `Failed: ${d.error || 'unknown error'}`;
   $('status').textContent = text;
 }
@@ -256,6 +328,7 @@ function renderPage() {
   }
 
   renderImage(at.doc, at.page);
+  renderOverlay(at.doc, at.page);
   renderTray();
   renderStatus();
 }
@@ -268,7 +341,10 @@ function renderTables() {
   const view = $('tables-view');
   view.replaceChildren();
   const tables = state.data.tables || [];
-  if (!tables.length) view.append(el('p', { class: 'note' }, 'No tables.'));
+  if (!tables.length) {
+    view.append(el('p', { class: 'note' },
+      state.data.status === 'running' ? 'The tables appear when every page has been read.' : 'No tables.'));
+  }
   for (const t of tables) {
     const head = el('tr', {}, t.columns.map(c => el('th', { scope: 'col' }, c)));
     const body = t.rows.map(r => el('tr', {}, t.columns.map(c => {
@@ -322,7 +398,7 @@ function openSource(src) {
 
 function goTo(i, { stopReplay: stop = false } = {}) {
   if (i < 0 || i >= state.order.length) return;
-  if (stop) stopReplay();
+  if (stop) { stopReplay(); setFollow(false); }
   state.cursor = i;
   state.activeFact = null;
   state.activeQuote = null;
@@ -330,6 +406,33 @@ function goTo(i, { stopReplay: stop = false } = {}) {
 }
 
 // ---- replay ----------------------------------------------------------------
+
+function setFollow(on) {
+  state.follow = on && state.data?.status === 'running';
+  $('follow').hidden = state.data?.status !== 'running' || state.follow;
+}
+
+function pageOrder(d) {
+  return d.documents.flatMap((doc, i) => doc.pages.map(p => ({ doc: i, page: p.number })));
+}
+
+// New data from a poll: keep the page on screen (or follow the newest), redraw.
+function apply(d) {
+  const at = state.order[state.cursor];
+  const atKey = at ? `${state.data.documents[at.doc]?.id}#${at.page}` : null;
+  d.documents = d.documents || [];
+  state.data = d;
+  state.order = pageOrder(d);
+  if (state.follow) {
+    state.cursor = state.order.length - 1;
+  } else if (atKey) {
+    const i = state.order.findIndex(o => `${d.documents[o.doc].id}#${o.page}` === atKey);
+    state.cursor = Math.max(0, i);
+  }
+  if (d.status !== 'running') setFollow(false); else $('follow').hidden = state.follow;
+  renderWarnings();
+  if (state.tab === 'tables') { renderTables(); renderStatus(); } else renderPage();
+}
 
 function stopReplay() {
   if (state.timer) clearInterval(state.timer);
@@ -366,7 +469,8 @@ async function main() {
 
   try {
     state.data = await load(url);
-    while (state.data.status === 'running') {
+    // Nothing to show until the first page is transcribed.
+    while (state.data.status === 'running' && !(state.data.documents || []).some(d => d.pages?.length)) {
       $('title').textContent = state.data.title || 'Documents';
       $('status').textContent = '';
       $('waiting').hidden = false;
@@ -384,13 +488,14 @@ async function main() {
   $('subtitle').textContent = d.subtitle || '';
   if (d.status === 'error') { renderStatus(); showError(d.error || 'The job failed.'); return; }
   d.documents = d.documents || [];
-  state.order = d.documents.flatMap((doc, i) => doc.pages.map(p => ({ doc: i, page: p.number })));
+  state.order = pageOrder(d);
   if (!state.order.length) { showError('No pages to show.'); return; }
 
   const startDoc = Number(params.get('doc')) || 0;
   const startPage = Number(params.get('page')) || null;
   const first = state.order.findIndex(o => o.doc === startDoc && (startPage === null || o.page === startPage));
   state.cursor = Math.max(0, first);
+  const running = d.status === 'running';
 
   $('tab-pages').addEventListener('click', () => setTab('pages'));
   $('tab-tables').addEventListener('click', () => setTab('tables'));
@@ -408,9 +513,26 @@ async function main() {
     resizeTimer = setTimeout(() => { if (state.tab === 'pages') renderPage(); }, 200);
   });
 
+  $('follow').addEventListener('click', () => { setFollow(true); apply(state.data); });
   renderWarnings();
   $('pages-view').hidden = false;
-  if (replayMs > 0) {
+  if (running) {
+    // Pages and facts arrive while the job runs.
+    state.revealed = Infinity;
+    setFollow(startPage === null);
+    if (state.follow) state.cursor = state.order.length - 1;
+    renderPage();
+    while (state.data.status === 'running') {
+      await new Promise(r => setTimeout(r, pollMs));
+      try {
+        apply(await load(url));
+      } catch (err) {
+        showError(err.message);
+        return;
+      }
+    }
+    if (state.data.status === 'error') showError(state.data.error || 'The job failed.');
+  } else if (replayMs > 0) {
     state.revealed = 0;
     startReplay(replayMs);
   } else {

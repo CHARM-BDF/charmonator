@@ -26,6 +26,8 @@ import {
 
 // Upper bound on replay_pace_ms (10 minutes per page).
 const MAX_REPLAY_PACE_MS = 600000;
+// Upper bound on page_concurrency (pages converted at once within one document).
+const MAX_PAGE_CONCURRENCY = 16;
 
 function buildPdfProcessingDeps() {
   return {
@@ -217,6 +219,22 @@ function createJobRecord(extra) {
 }
 
 /**
+ * Tell an in-process caller (convertDocument's onPage) about a committed page.
+ * A failing callback must not fail the conversion.
+ */
+function notifyPage(jobRec, pageChunk) {
+  jobRec.pages_notified = (jobRec.pages_notified || 0) + 1;
+  if (!jobRec.onPage) return;
+  try {
+    jobRec.onPage(pageChunk);
+  } catch (err) {
+    console.warn(JSON.stringify({ event: 'onPage callback failed', err: err?.message }));
+  }
+}
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
  * Create a conversion job record and start converting it. `fields` are the job
  * record's fields (see the POST handler); `cachePolicy` must already be resolved.
  * Returns the record and a promise that settles when the job has finished
@@ -252,7 +270,12 @@ function launchConversionJob(fields) {
  * of POST /conversions/documents as JavaScript values and resolves to the same
  * document object GET /documents/:jobId/result returns. The job is an ordinary
  * conversion job, so GET /documents/:jobId and /pages report on it while it runs;
- * `onStart(jobId)` is called with its id as soon as it exists.
+ * `onStart(jobId)` is called with its id as soon as it exists, and
+ * `onPage(page)` with each page chunk, in page order, as soon as it is done.
+ * `page_concurrency` converts up to that many pages at once (pages are still
+ * committed and reported in order; ignored with detect_document_boundaries).
+ * On a cache hit, `replay_pace_ms` reports the cached pages that many ms apart,
+ * so a recorded run can be shown at a readable pace.
  * Rejects with the job's error if conversion fails.
  */
 export async function convertDocument({
@@ -271,10 +294,16 @@ export async function convertDocument({
   tags = null,
   continue_on_failure = false,
   cache,
-  onStart = null
+  page_concurrency = 1,
+  replay_pace_ms = null,
+  onStart = null,
+  onPage = null
 } = {}) {
   if (!fileBuffer) throw new Error('convertDocument: fileBuffer is required');
   if (!model) throw new Error('convertDocument: model is required');
+  if (!Number.isInteger(page_concurrency) || page_concurrency < 1 || page_concurrency > MAX_PAGE_CONCURRENCY) {
+    throw new Error(`convertDocument: page_concurrency must be an integer from 1 to ${MAX_PAGE_CONCURRENCY}`);
+  }
   const cacheResolution = resolveCachePolicy(cache);
   if (cacheResolution.error) throw new Error(cacheResolution.error);
   let cachePolicy = cacheResolution.policy;
@@ -303,7 +332,9 @@ export async function convertDocument({
     originatingFilename: filename,
     originatingFilepath: null,
     cachePolicy,
-    replayPaceMs: null
+    replayPaceMs: replay_pace_ms,
+    page_concurrency,
+    onPage
   });
   if (onStart) onStart(jobRec.id);
   await done;
@@ -312,7 +343,45 @@ export async function convertDocument({
     err.details = jobRec.error;
     throw err;
   }
+  // Pages not reported while converting (DOCX, or a cache hit without replay).
+  const pages = jobRec.finalDocObject?.chunks?.pages || [];
+  for (const page of pages.slice(jobRec.pages_notified || 0)) notifyPage(jobRec, page);
   return jobRec.finalDocObject;
+}
+
+/**
+ * Render one page of a PDF to PNG, as conversion does, for apps that need the
+ * page image after conversion (e.g. to locate quotes on it, lib/locate.mjs).
+ * The temp PDF and PNG are removed before returning.
+ * @returns {Promise<Buffer>} the page as PNG
+ */
+export async function renderPdfPage(fileBuffer, pageNumber, { width = 1536 } = {}) {
+  if (!Buffer.isBuffer(fileBuffer)) throw new Error('renderPdfPage: fileBuffer must be a Buffer');
+  if (!Number.isInteger(pageNumber) || pageNumber < 1) throw new Error('renderPdfPage: pageNumber must be a positive integer');
+  const deps = pdfProcessingDeps;
+  const id = uuidv4();
+  await fs.promises.mkdir('uploads', { recursive: true });
+  const tmpPdfPath = path.join('uploads', `render_${id}.pdf`);
+  let pngPath = path.join('uploads', `render_${id}.${pageNumber}.png`);
+  try {
+    await fs.promises.writeFile(tmpPdfPath, fileBuffer);
+    const converter = deps.createPdfConverter(tmpPdfPath, {
+      density: 300,
+      saveFilename: `render_${id}`,
+      savePath: 'uploads',
+      format: 'png',
+      width,
+      preserveAspectRatio: true
+    });
+    const output = await converter(pageNumber);
+    if (!output?.path) throw new Error(`no image for page ${pageNumber}`);
+    pngPath = output.path;
+    const image = await deps.readImage(output.path);
+    return await image.getBuffer('image/png');
+  } finally {
+    Promise.resolve(deps.unlinkFile(tmpPdfPath)).catch(() => {});
+    Promise.resolve(deps.unlinkFile(pngPath)).catch(() => {});
+  }
 }
 
 /**
@@ -345,6 +414,10 @@ const router = express.Router();
  *               Default "off", or "use" when env CHARMD_CACHE=on. See docs/api-docs.md.
  *  - "replay_pace_ms" => integer ms per page (optional). Only on a cache hit: pages are
  *               revealed one every replay_pace_ms, then the job completes.
+ *  - "page_concurrency" => integer 1-16, default 1: pages converted at once. Pages are
+ *               still added to the result (and to /pages) in order. Forced to 1 with
+ *               detect_document_boundaries, which compares each page with the one before.
+ *  - "ocr_threshold" above 1 skips Tesseract entirely (every page goes to the model).
  *
  * Returns { job_id }, which can be polled:
  *  GET /documents/:jobId
@@ -368,7 +441,8 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       detect_document_boundaries = 'false',
       describe: describeParam = 'true',
       tags: tagsParam,
-      continue_on_failure = 'false'
+      continue_on_failure = 'false',
+      page_concurrency = '1'
     } = req.body;
 
     if (!model) {
@@ -443,6 +517,11 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       }
     }
 
+    const pageConcurrency = Number(page_concurrency);
+    if (!Number.isInteger(pageConcurrency) || pageConcurrency < 1 || pageConcurrency > MAX_PAGE_CONCURRENCY) {
+      return res.status(400).json({ error: `page_concurrency must be an integer from 1 to ${MAX_PAGE_CONCURRENCY}` });
+    }
+
     // Compute SHA-256
     const sha256sum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
@@ -466,7 +545,8 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       originatingFilename,
       originatingFilepath,
       cachePolicy,
-      replayPaceMs
+      replayPaceMs,
+      page_concurrency: pageConcurrency
     });
 
     return res.json({ job_id: jobRec.id });
@@ -671,7 +751,20 @@ async function runConversionJob(jobRec) {
       console.log(JSON.stringify({
         event: 'cache hit', key: shortKey(jobRec.cacheKey), pages: pages.length, replay_pace_ms: jobRec.replayPaceMs
       }));
-      if (jobRec.replayPaceMs) {
+      if (jobRec.onPage) {
+        // In-process caller: report pages as they are "converted", at the replay pace.
+        jobRec.status = 'processing';
+        jobRec.pages_converted = 0;
+        jobRec.livePages = [];
+        for (const page of pages) {
+          if (jobRec.replayPaceMs) await sleep(jobRec.replayPaceMs);
+          jobRec.livePages.push(page);
+          jobRec.pages_converted += 1;
+          notifyPage(jobRec, page);
+        }
+        jobRec.finalDocObject = doc;
+        jobRec.status = 'complete';
+      } else if (jobRec.replayPaceMs) {
         jobRec.status = 'processing';
         jobRec.pages_converted = 0;
         jobRec.replay = { startedAt: Date.now(), paceMs: jobRec.replayPaceMs, pages, doc, done: false };
@@ -768,11 +861,12 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
     // Exposed for GET /documents/:jobId/pages while the job is still running.
     jobRec.livePages = chunkPages;
 
-    let previousPageImageDataUrl = null;
-
-    for (let i = 0; i < numPages; i++) {
+    // Convert one page. Returns its chunk (start is assigned on commit) and, when
+    // boundary detection is on, the page image for the next page's comparison.
+    const convertPage = async (i, previousPageImageDataUrl) => {
       let pageChunk;
       let pagePngPath = null;
+      let imageDataUrl = null;
       
       try {
         // Recorded before conversion so a converter that writes the PNG and then throws
@@ -796,8 +890,11 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
         const image = await deps.readImage(output.path);
         const pngBuffer = await image.getBuffer('image/png');
 
-        // Tesseract OCR
-        const ocr = await deps.ocrPageBuffer(pngBuffer);
+        // Tesseract OCR; skipped when no confidence could pass the threshold
+        // (ocr_threshold > 1 sends every page to the vision model).
+        const ocr = jobRec.ocr_threshold > 1
+          ? { text: '', qualityScore: 0 }
+          : await deps.ocrPageBuffer(pngBuffer);
         let pageText = ocr.text;
         let textMethod = 'ocr';
         let confidence = ocr.qualityScore;
@@ -889,7 +986,7 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
 
         if (jobRec.detect_document_boundaries) {
           const pageBase64 = pngBuffer.toString('base64');
-          previousPageImageDataUrl = `data:image/png;base64,${pageBase64}`;
+          imageDataUrl = `data:image/png;base64,${pageBase64}`;
         }
       } catch (pageError) {
         console.error(`[Page ${i + 1}] Processing failed:`, pageError.message);
@@ -900,7 +997,6 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
         {
           console.log(`[Page ${i + 1}] Creating error placeholder due to --continue-on-failure flag`);
           pageChunk = createErrorPage(i, pageError, jobRec);
-          pageChunk.start = currentStart;
         } else {
           // Re-throw the error to maintain current behavior when flag not set
           throw pageError;
@@ -912,10 +1008,52 @@ export async function processPdfDocument(jobRec, tmpPdfPath) {
         }
       }
 
+      return { pageChunk, imageDataUrl };
+    };
+
+    // Pages are committed strictly in order, whatever order they finish in.
+    const commit = (pageChunk, i) => {
+      pageChunk.start = currentStart;
       chunkPages.push(pageChunk);
       allTextPieces.push(pageChunk.content);
       currentStart += pageChunk.length;
       jobRec.pages_converted = i + 1;
+      notifyPage(jobRec, pageChunk);
+    };
+
+    // Boundary detection compares each page with the one before, so it is sequential.
+    const concurrency = jobRec.detect_document_boundaries
+      ? 1 : Math.max(1, Math.min(numPages, Number(jobRec.page_concurrency) || 1));
+    if (concurrency === 1) {
+      let previous = null;
+      for (let i = 0; i < numPages; i++) {
+        const { pageChunk, imageDataUrl } = await convertPage(i, previous);
+        previous = imageDataUrl;
+        commit(pageChunk, i);
+      }
+    } else {
+      const finished = new Array(numPages);
+      let next = 0;
+      let toCommit = 0;
+      let failure = null;
+      const worker = async () => {
+        while (!failure && next < numPages) {
+          const i = next++;
+          try {
+            finished[i] = (await convertPage(i, null)).pageChunk;
+          } catch (err) {
+            failure ??= err;
+            return;
+          }
+          while (toCommit < numPages && finished[toCommit]) {
+            commit(finished[toCommit], toCommit);
+            finished[toCommit] = null;
+            toCommit++;
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: concurrency }, worker));
+      if (failure) throw failure;
     }
 
     const combinedContent = allTextPieces.join(

@@ -24,6 +24,7 @@
         <button type="button" role="tab" id="tab-tables" aria-selected="false">Tables</button>
       </div>
       <button type="button" id="replay" class="ghost" hidden>Pause</button>
+      <button type="button" id="follow" class="ghost" hidden>Follow</button>
     </div>
   </header>
 
@@ -40,7 +41,7 @@
       </div>
       <div class="page-body">
         <figure class="image" id="image-pane">
-          <canvas id="canvas"></canvas>
+          <div class="canvas-wrap"><canvas id="canvas"></canvas><div class="overlay" id="overlay"></div></div>
           <figcaption id="image-note"></figcaption>
         </figure>
         <div class="text" id="text-pane" tabindex="0" aria-label="Transcription"></div>

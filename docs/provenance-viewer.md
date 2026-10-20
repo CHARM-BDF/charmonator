@@ -21,6 +21,7 @@ An app supplies the data; the viewer knows nothing about any particular table fo
 | `poll_ms` | while the data says `"status": "running"`, refetch this often (default 3000, minimum 1000) |
 | `doc`, `page` | open at this document (index from 0) and page number |
 | `theme` | `light` or `dark`; otherwise the browser's preference |
+| `highlight` | where a document has `locate_url`: `select` (default) boxes the selected fact's quotes, or a table cell's source, on the page image; `auto` boxes every fact's quotes on the page; `off` none |
 
 The viewer fetches `data` and any `pdf_url` with the browser's credentials, so whatever authentication protects the app protects the view.
 
@@ -50,8 +51,9 @@ The viewer fetches `data` and any `pdf_url` with the browser's credentials, so w
 }
 ```
 
- - `status` is `complete`, `running` (the viewer shows `progress.label` and polls) or `error` (it shows `error`).
+ - `status` is `complete`, `running` or `error` (the viewer shows `error`). While `running`, the viewer shows `progress.label` and polls; documents, pages and facts may arrive over time (send what exists so far) and the viewer follows the newest page until the user moves to another (a Follow button resumes). Send `tables` when complete.
  - `documents[].pdf_url` is optional; without it the viewer shows the transcription alone. It must be same-origin.
+ - `documents[].locate_url` is optional: a same-origin endpoint the viewer POSTs `{ "document": "<id>", "page": 20, "quotes": ["…"] }` to, answering `{ "boxes": [{ "quote": "…", "found": true, "box": [x0, y0, x1, y1] }] }` with the box in fractions of the page's width and height (charmd's `lib/locate.mjs` produces exactly this). The viewer draws the boxes over the page image.
  - Facts and sources refer to documents by `id` and to pages by `number`.
  - Quotes are found in the page text ignoring case, spacing and punctuation, so a quote copied from a transcription matches even if line breaks differ. A quote that cannot be found is listed with its fact but not highlighted.
  - `tables` and `warnings` are optional.
