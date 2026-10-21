@@ -8,7 +8,7 @@ It shows three things:
  - **Tables:** any tables the data includes. A cell with sources opens its first source page with the quote highlighted.
  - **Warnings**, listed at the bottom.
 
-An app supplies the data; the viewer knows nothing about any particular table format. See `apps/pcx30` in the private PCX apps for an example (`GET /apps/pcx30/v1/convert/:job/view`).
+An app supplies the data; the viewer knows nothing about any particular table format. Typically an app runs `convertDocument` and `createTabulator` (see [tabulate.md](tabulate.md)) and serves their results in the form below from a route of its own.
 
 ## Opening it
 
