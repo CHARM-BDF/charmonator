@@ -189,6 +189,13 @@ mark.active { background: var(--mark-active); }
 
 .warnings { margin: 0; padding: 8px 16px 12px 32px; border-top: 1px solid var(--line); color: var(--warn); font-size: 12px; }
 
+/* Panel-sized frames (a portal tab or modal): narrower side columns, more room for the page image. */
+@media (min-width: 901px) and (max-width: 1279px) {
+  .pages-view { grid-template-columns: 112px minmax(0, 1fr) 240px; }
+  .tray .grid { grid-template-columns: repeat(3, 1fr); }
+  .page-body { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+}
+
 @media (max-width: 900px) {
   .pages-view { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; overflow-y: auto; }
   .tray { border-right: 0; border-bottom: 1px solid var(--line); max-height: 160px; }
