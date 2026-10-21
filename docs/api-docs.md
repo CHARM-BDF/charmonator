@@ -600,12 +600,13 @@ POST api/charmonizer/v1/conversions/documents
 
 - **`file`** (multipart) **OR** `pdf_dataurl` (base64) — the PDF data.  
 - **`model`** (string, optional) — fallback LLM if OCR confidence is low or if boundary detection is needed.  
-- **`ocr_threshold`** (float, optional) — threshold for deciding fallback (default: `0.7`).  
+- **`ocr_threshold`** (float, optional) — threshold for deciding fallback (default: `0.7`). Above `1`, Tesseract is skipped entirely and every page goes to `model` (no Tesseract confidence can pass).  
 - **`scrutinize`** (string, optional) - Specify a method to scrutinize the image text.  (default: "none")
 - **`page_numbering`** (string, optional) — `"true"` or `"false"` (default: `"true"`)  
 - **`description`, `intent`, `graphic_instructions`** (optional) — context strings for fallback model.  
 - **`detect_document_boundaries`** (string, optional) — `"true"` or `"false"` (default: `"false"`)  
 - **`continue_on_failure`** (string, optional) — `"true"` or `"false"` (default: `"false"`) — when enabled, individual page failures (e.g., content filtering violations) create error placeholder pages rather than failing the entire job  
+- **`page_concurrency`** (integer, optional) — pages converted at once, 1 to 16 (default: `1`). Pages are still added to the result, and reported by `/pages`, in page order. Forced to `1` with `detect_document_boundaries`, which compares each page with the one before. It does not affect the result, so it is not part of the cache key.  
 
 #### Immediate Response
 
