@@ -32,4 +32,12 @@ describe('Provenance viewer', function() {
     assert.doesNotMatch(html + js, /https?:\/\//);
     assert.match(js, /\.\/pdfjs\/pdf\.min\.mjs/);
   });
+
+  it('posts events to a host page only at the origin it names', async function() {
+    const js = await (await fetch(`${root}/viewer/provenance.js`)).text();
+    const posts = js.match(/postMessage\([^)]*\)/g) || [];
+    assert.equal(posts.length, 1);
+    assert.match(posts[0], /parentOrigin\)$/);
+    assert.doesNotMatch(js, /postMessage\([^)]*'\*'/);
+  });
 });

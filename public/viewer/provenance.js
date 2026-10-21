@@ -10,6 +10,8 @@
 //   highlight  boxes on the page image, where a document has locate_url:
 //              select (default) for the selected fact or table source only,
 //              auto for every fact on the page, off for none
+//   parent_origin  when framed, post events to the host page at this origin
+//              (status, complete, page, fact, source; see docs/provenance-viewer.md)
 
 const params = new URLSearchParams(location.search);
 const $ = id => document.getElementById(id);
@@ -31,7 +33,11 @@ const state = {
   renderTask: null,
   highlight: ['auto', 'select', 'off'].includes(params.get('highlight')) ? params.get('highlight') : 'select',
   boxes: new Map(),     // "doc#page" -> Map(quote -> box | null)
-  locating: new Set()   // "doc#page#quote" requests in flight
+  locating: new Set(),  // "doc#page#quote" requests in flight
+  dataUrl: null,        // documents' pdf_url and locate_url resolve against this
+  lastStatus: null,     // events to a host page: the last status sent,
+  completeSent: false,  // whether 'complete' was sent,
+  notifiedPage: null    // and the last page reported
 };
 
 if (params.get('debug') === '1') window.__provenance = state;   // for inspection only
@@ -54,13 +60,52 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-function sameOriginUrl(raw) {
+function sameOriginUrl(raw, base = location.href) {
   if (!raw) return null;
   try {
-    const u = new URL(raw, location.href);
+    const u = new URL(raw, base);
     return u.origin === location.origin ? u.href : null;
   } catch {
     return null;
+  }
+}
+
+// ---- events to a host page -------------------------------------------------
+
+// Only to the origin the embedder names, never '*': the events carry document text.
+const parentOrigin = (() => {
+  const raw = params.get('parent_origin');
+  if (!raw || window.parent === window) return null;
+  try {
+    const u = new URL(raw);
+    return u.origin === raw.replace(/\/$/, '') ? u.origin : null;
+  } catch {
+    return null;
+  }
+})();
+
+function notify(type, detail = {}) {
+  if (parentOrigin) window.parent.postMessage({ source: 'charmd-provenance', type, ...detail }, parentOrigin);
+}
+
+function notifyStatus() {
+  const d = state.data;
+  const detail = {
+    status: d.status || 'complete',
+    title: d.title || null,
+    documents: (d.documents || []).length,
+    pages: state.order.length,
+    facts: (d.facts || []).length,
+    progress: d.progress?.label || null
+  };
+  const key = JSON.stringify(detail);
+  if (key === state.lastStatus) return;
+  const wasRunning = state.lastStatus && JSON.parse(state.lastStatus).status === 'running';
+  state.lastStatus = key;
+  notify('status', detail);
+  if (detail.status === 'complete' && (wasRunning || !state.completeSent)) {
+    state.completeSent = true;
+    notify('complete', { ...detail, tables: (d.tables || []).map(t => ({ name: t.name, title: t.title || t.name, rows: (t.rows || []).length })) });
   }
 }
 
@@ -147,7 +192,7 @@ async function pdfLib() {
 }
 
 function pdfFor(doc) {
-  const url = sameOriginUrl(state.data.documents[doc]?.pdf_url);
+  const url = sameOriginUrl(state.data.documents[doc]?.pdf_url, state.dataUrl);
   if (!url) return null;
   if (!state.pdfs.has(doc)) {
     state.pdfs.set(doc, pdfLib().then(lib => lib.getDocument({ url, withCredentials: true }).promise));
@@ -217,7 +262,7 @@ function quotesToBox(doc, page) {
 
 async function fetchBoxes(doc, page, quotes) {
   const d = state.data.documents[doc];
-  const url = sameOriginUrl(d?.locate_url);
+  const url = sameOriginUrl(d?.locate_url, state.dataUrl);
   if (!url) return;
   const key = `${doc}#${page}`;
   const known = state.boxes.get(key) || new Map();
@@ -311,6 +356,10 @@ function renderPage() {
   const page = d.pages.find(p => p.number === at.page);
   const read = isRevealed(at.doc, at.page);
   $('page-label').textContent = `${d.filename || d.id} · page ${at.page} of ${d.pages.length}`;
+  if (state.notifiedPage !== `${d.id}#${at.page}`) {
+    state.notifiedPage = `${d.id}#${at.page}`;
+    notify('page', { document: d.id, filename: d.filename || null, page: at.page });
+  }
 
   const facts = read ? factsOn(at.doc, at.page) : [];
   const quotes = facts.flatMap(f => (f.quotes || []).map(q => ({ key: f.id, quote: q, active: f.id === state.activeFact })));
@@ -332,7 +381,12 @@ function renderPage() {
     list.append(el('li', {}, el('button', {
       type: 'button',
       class: `fact${f.id === state.activeFact ? ' active' : ''}`,
-      onclick: () => { state.activeFact = f.id === state.activeFact ? null : f.id; state.activeQuote = null; renderPage(); }
+      onclick: () => {
+        state.activeFact = f.id === state.activeFact ? null : f.id;
+        state.activeQuote = null;
+        renderPage();
+        if (state.activeFact) notify('fact', { id: f.id, label: f.label, detail: f.detail || null, document: d.id, page: at.page, quotes: f.quotes || [] });
+      }
     },
     el('span', { class: 'label' }, f.label),
     f.detail ? el('span', { class: 'detail' }, f.detail) : null,
@@ -403,6 +457,7 @@ function openSource(src) {
   if (i < 0) return;
   state.activeFact = null;
   state.activeQuote = { doc, page: src.page, quote: src.quote };
+  notify('source', { document: src.document, page: src.page, quote: src.quote });
   stopReplay();
   state.cursor = i;
   setTab('pages');
@@ -435,6 +490,7 @@ function apply(d) {
   d.documents = d.documents || [];
   state.data = d;
   state.order = pageOrder(d);
+  notifyStatus();
   if (state.follow) {
     state.cursor = state.order.length - 1;
   } else if (atKey) {
@@ -472,6 +528,7 @@ function startReplay(ms) {
 
 async function main() {
   const url = sameOriginUrl(params.get('data'));
+  state.dataUrl = url;
   if (!url) {
     showError('Missing or invalid ?data= (it must be a URL on this server).');
     return;
@@ -487,6 +544,7 @@ async function main() {
       $('status').textContent = '';
       $('waiting').hidden = false;
       $('waiting').textContent = state.data.progress?.label || 'Working…';
+      notifyStatus();
       await new Promise(r => setTimeout(r, pollMs));
       state.data = await load(url);
     }
@@ -501,6 +559,7 @@ async function main() {
   if (d.status === 'error') { renderStatus(); showError(d.error || 'The job failed.'); return; }
   d.documents = d.documents || [];
   state.order = pageOrder(d);
+  notifyStatus();
   if (!state.order.length) { showError('No pages to show.'); return; }
 
   const startDoc = Number(params.get('doc')) || 0;
