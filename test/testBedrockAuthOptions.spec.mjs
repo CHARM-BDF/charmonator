@@ -43,7 +43,9 @@ describe('Anthropic_Bedrock auth options', function() {
   it('uses the default credential chain when no keys or profile are given (main behaviour)', function() {
     const r = resolveBedrockClientOptions({ api: 'Anthropic_Bedrock', aws_region: 'us-west-2' });
     assert.equal(r.mode, 'default_chain');
-    assert.deepEqual(r.clientOptions, { awsRegion: 'us-west-2' });
+    assert.equal(r.clientOptions.awsRegion, 'us-west-2');
+    assert.equal(r.clientOptions.awsAccessKey, undefined);
+    assert.equal(typeof r.clientOptions.providerChainResolver, 'function');
   });
 
   it('uses static keys when both are given, with ${ENV} interpolation', function() {
@@ -72,7 +74,7 @@ describe('Anthropic_Bedrock auth options', function() {
       aws_region: '${CHARMD_TEST_REGION}'
     });
     assert.equal(r.mode, 'default_chain');
-    assert.deepEqual(r.clientOptions, {});
+    assert.deepEqual(Object.keys(r.clientOptions), ['providerChainResolver']);
   });
 
   it('uses a named (e.g. SSO) profile via aws_profile', async function() {
@@ -93,7 +95,7 @@ describe('Anthropic_Bedrock auth options', function() {
     assert.equal(resolveBedrockClientOptions({ ...cfg, aws_auth: 'profile' }).mode, 'profile');
     const dc = resolveBedrockClientOptions({ ...cfg, aws_auth: 'default_chain' });
     assert.equal(dc.mode, 'default_chain');
-    assert.deepEqual(dc.clientOptions, {});
+    assert.deepEqual(Object.keys(dc.clientOptions), ['providerChainResolver']);
   });
 
   it('rejects inconsistent or unknown aws_auth values', function() {
@@ -111,7 +113,19 @@ describe('Anthropic_Bedrock auth options', function() {
 
     const d = new AnthropicProvider({ api: 'Anthropic_Bedrock', model: 'm', aws_region: 'eu-west-1' });
     assert.equal(d.bedrockAuthMode, 'default_chain');
-    assert.equal(d.client.providerChainResolver, null);
+    assert.equal(typeof d.client.providerChainResolver, 'function');
+  });
+
+  it('shares one cached credential provider across clients', async function() {
+    const a = resolveBedrockClientOptions({ aws_region: 'us-east-1' });
+    const b = resolveBedrockClientOptions({ aws_region: 'us-west-2' });
+    const pa = await a.clientOptions.providerChainResolver();
+    assert.equal(typeof pa, 'function');
+    assert.equal(pa, await a.clientOptions.providerChainResolver());
+    assert.equal(pa, await b.clientOptions.providerChainResolver());
+    const p1 = await resolveBedrockClientOptions({ aws_profile: 'x' }).clientOptions.providerChainResolver();
+    assert.equal(p1, await resolveBedrockClientOptions({ aws_profile: 'x' }).clientOptions.providerChainResolver());
+    assert.notEqual(p1, pa);
   });
 
   it('default chain picks up ECS task-role credentials (loopback mocks, no AWS)', async function() {
