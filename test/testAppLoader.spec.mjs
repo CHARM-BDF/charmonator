@@ -32,6 +32,7 @@ export function createRouter(ctx) {
       hasGetConfig: typeof ctx.getConfig === 'function',
       importedCharmd: typeof probes === 'object',
       importedPackage: typeof multer === 'function',
+      resolvedPackage: ctx.resolvePackage('multer/package.json').endsWith('package.json'),
     });
   });
   return router;
@@ -65,7 +66,7 @@ describe('App loader', function() {
       assert.equal(r.status, 200);
       assert.deepEqual(await r.json(), {
         appId: 'outside', appDir: dir, name: 'Outside',
-        hasChatModel: true, hasGetConfig: true, importedCharmd: true, importedPackage: true,
+        hasChatModel: true, hasGetConfig: true, importedCharmd: true, importedPackage: true, resolvedPackage: true,
       });
     } finally {
       server.close();
