@@ -470,8 +470,23 @@ export function createRouter(ctx) {
 | `getConfig()` | charmd's configuration |
 | `fetchChatModel(name)` | a configured chat model, as in [Using AI Models](#using-ai-models) |
 | `importCharmd(relPath)` | imports a charmd module by path from the charmd root, e.g. `importCharmd('lib/core.mjs')`. An escape hatch: these paths are not a stable API |
+| `importPackage(name)` | imports a package from charmd's own dependencies, e.g. `(await importPackage('multer')).default`, so an app need not install its own copy |
+| `resolvePackage(name)` | the file path of a file in one of charmd's dependencies, e.g. `resolvePackage('pdfjs-dist/package.json')`, so an app can serve that package's files |
 
 `createRouter` may be `async`. Putting a version in the route paths (`/v1/...`) lets an app change its interface later without breaking clients.
+
+**Helpers for document apps.** Two charmd functions are meant for apps that turn records into structured data:
+
+ - `convertDocument({ fileBuffer, filename, mimetype, model, cache, page_concurrency, replay_pace_ms, onStart, onPage, ... })` in `routes/charmonizer/document-conversion.mjs` converts a PDF or DOCX in-process, with the options of `POST /conversions/documents` (including the result cache), and resolves to the same document object. The job is an ordinary conversion job: `onStart(jobId)` gets its id, and `GET /conversions/documents/:jobId/pages` shows its progress. `onPage(page)` is called with each page chunk, in page order, as soon as it is done, so an app can stream; `page_concurrency` converts that many pages at once. On a cache hit, `replay_pace_ms` reports the cached pages that many milliseconds apart, so a recorded run can be shown at a readable pace.
+ - `renderPdfPage(fileBuffer, pageNumber, { width })`, in the same module, renders one page to PNG (e.g. to locate quotes on it after conversion).
+ - `tabulateDocuments(...)` and `createTabulator(...)` in `lib/tabulate.mjs` extract rows for a set of tables from converted documents, tracing every cell to a page and a quote; the tabulator takes pages as they are converted. See [Tabulation](tabulate.md).
+ - `locateQuotes({ image, quotes, model })` in `lib/locate.mjs` finds quotes on a page image with a vision model and returns boxes as fractions of the page, for drawing highlights over the page.
+
+```javascript
+const { convertDocument } = await ctx.importCharmd('routes/charmonizer/document-conversion.mjs');
+const { tabulateDocuments } = await ctx.importCharmd('lib/tabulate.mjs');
+const { locateQuotes } = await ctx.importCharmd('lib/locate.mjs');
+```
 
 ## Best Practices
 

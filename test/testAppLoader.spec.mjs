@@ -23,6 +23,7 @@ export function createRouter(ctx) {
   const router = ctx.express.Router();
   router.get('/v1/ctx', async (req, res) => {
     const probes = await ctx.importCharmd('lib/log-safety.mjs');
+    const multer = (await ctx.importPackage('multer')).default;
     res.json({
       appId: ctx.appId,
       appDir: ctx.appDir,
@@ -30,6 +31,8 @@ export function createRouter(ctx) {
       hasChatModel: typeof ctx.fetchChatModel === 'function',
       hasGetConfig: typeof ctx.getConfig === 'function',
       importedCharmd: typeof probes === 'object',
+      importedPackage: typeof multer === 'function',
+      resolvedPackage: ctx.resolvePackage('multer/package.json').endsWith('package.json'),
     });
   });
   return router;
@@ -63,7 +66,7 @@ describe('App loader', function() {
       assert.equal(r.status, 200);
       assert.deepEqual(await r.json(), {
         appId: 'outside', appDir: dir, name: 'Outside',
-        hasChatModel: true, hasGetConfig: true, importedCharmd: true,
+        hasChatModel: true, hasGetConfig: true, importedCharmd: true, importedPackage: true, resolvedPackage: true,
       });
     } finally {
       server.close();
