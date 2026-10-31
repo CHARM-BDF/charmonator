@@ -311,6 +311,7 @@ Other environment variables:
 | `CHARMD_CACHE_S3_URI` | `s3://bucket/prefix` S3 cache store, via the AWS default credential chain. Wins over `CHARMD_CACHE_DIR`. The role needs `s3:GetObject`, `s3:PutObject` and `s3:ListBucket` (used by `/readyz`). |
 | `CHARMD_CACHE_S3_SSE`, `CHARMD_CACHE_S3_KMS_KEY_ID` | Optional `ServerSideEncryption` (`aws:kms`, `AES256`) and KMS key for puts; unset uses the bucket default. |
 | `CHARMD_CACHE` | `on`: requests without `cache` use `use`. Unset: the cache is off unless a request asks. |
+| `CHARMD_RETAIN_MAX_DAYS` | Longest retention an app may grant a job (`lib/retained-jobs.mjs`; default 30). Retained jobs live in the cache store above; with S3, deleting an expired job needs `s3:DeleteObject`. |
 | `CHARMONATOR_DEBUG_TRANSCRIPTS` | `1` re-enables content logging. Never set it where logs leave the PHI boundary. |
 | `CHARMONATOR_PORT` | Overrides `server.port` (the image sets 8080). |
 | `CHARMONATOR_APPS_PATH` | Directories of apps to load in addition to config's `apps`, separated like `PATH`. See `docs/apps.md` › Apps outside the charmd tree. |
